@@ -88,6 +88,35 @@ For example, with `ORIGIN=https://auth.example.com`:
 - Spotify: `https://auth.example.com/api/oauth/connect/spotify/callback`
 - Twitch: `https://auth.example.com/api/oauth/connect/twitch/callback`
 
+### OAuth Flow
+
+```
+1. User visits protected app → app.example.com/dashboard
+   ↓
+2. App redirects to SSO → sso.example.com?host=app.example.com&path=/dashboard
+   ↓
+3. SSO root sets redirect cookies (host, path)
+   ↓
+4. User clicks "Sign in with GitHub" → /connect/github
+   ↓
+5. Grant handles OAuth with GitHub
+   ↓
+6. GitHub redirects to → /connect/github/callback (Grant internal)
+   ↓
+7. Grant redirects to → /auth/callback (our custom route)
+   ↓
+8a. User FOUND:
+    - Create session in DB
+    - Set session cookie for *.example.com
+    - Clear redirect cookies
+    - Redirect to app.example.com/dashboard
+   ↓
+8b. User NOT FOUND:
+    - Clear session cookie
+    - Keep redirect cookies (for after signup)
+    - Redirect to sso.example.com/ (for signup)
+```
+
 ## Database Schema
 
 The system uses SQLite with two main tables:
@@ -811,10 +840,4 @@ This is currently a work-in-progress project. Key areas for contribution:
 4. **Testing**: Add comprehensive test coverage
 5. **Documentation**: Expand examples and use cases
 
-## License
 
-[Add your license here]
-
-## Support
-
-[Add support information here]

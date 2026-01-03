@@ -1,44 +1,181 @@
 import Fastify from 'fastify'
+import cookie from '@fastify/cookie'
+import session from '@fastify/session'
 import grant from "grant"
 import { grantOptions, getGrantData, type RawGrant } from "#/providers/index.ts"
+import { domain, ORIGIN, validateRedirectHost } from "#/domain.ts"
+import type { CookieName } from "@sso/client"
+import type Database from "better-sqlite3"
+import { createSessionManager, type SessionManager } from "#/sessions.ts"
 
 const PORT = process.env.PORT!
 if (!PORT) throw new Error("PORT not set in environment")
 
-const fastify = Fastify({
-	logger: true
-})
+const COOKIE_NAME: CookieName = 'sso_session'
+export function webServer(sessionManager: SessionManager) {
 
-fastify.get('/', function (request, reply) {
-	/**
-	 * Serve a web page that allows
-	 * - signing in with OAuth providers (available providers from grantOptions)
-	 * - signing up with invitation code (step 1 of invitation flow) + oauth (step 2)
-	 * 
-	 * On successful authentication
-	 * - set a session cookie on `domain` (from domain.ts), shared across subdomains
-	 * - redirects to ?host=...&path=...
-	 * 
-	 * `host` must end with `.${domain}` (from domain.ts)
-	 * 
-	 */
-	reply.send({ hello: 'world' })
-})
-
-void fastify.register(
-	grant.default.fastify({
-		defaults: {
-			origin: process.env.ORIGIN,
-			transport: "session",
-			state: true,
-			prefix: "/api/oauth/connect",
-			callback: "/api/oauth/finalize",
-		},
-		...grantOptions,
+	const fastify = Fastify({
+		logger: true
 	})
-)
 
-export function webServer() {
+	// Register cookie and session plugins (required by Grant)
+	void fastify.register(cookie)
+	void fastify.register(session, {
+		secret: process.env.SECRET!,
+		cookie: {
+			secure: domain !== 'localhost',
+			httpOnly: true,
+			maxAge: 600000 // 10 minutes - only for OAuth flow
+		}
+	})
+
+	// Root page - sets redirect cookies
+	fastify.get('/', function (request, reply) {
+		// Get redirect parameters from query
+		const host = request.query?.host as string | undefined
+		const path = request.query?.path as string | undefined
+
+		// Set temporary cookies to preserve redirect destination through OAuth flow
+		if (host) {
+			reply.setCookie('redirect_host', host, {
+				httpOnly: true,
+				secure: domain !== 'localhost',
+				domain: domain === 'localhost' ? undefined : `.${domain}`,
+				sameSite: 'lax',
+				maxAge: 600, // 10 minutes - just long enough for OAuth flow
+				path: '/'
+			})
+		}
+
+		if (path) {
+			reply.setCookie('redirect_path', path, {
+				httpOnly: true,
+				secure: domain !== 'localhost',
+				domain: domain === 'localhost' ? undefined : `.${domain}`,
+				sameSite: 'lax',
+				maxAge: 600, // 10 minutes
+				path: '/'
+			})
+		}
+
+		/**
+		 * Serve a web page that allows
+		 * - signing in with OAuth providers (available providers from grantOptions)
+		 * - signing up with invitation code (step 1 of invitation flow) + oauth (step 2)
+		 * 
+		 * Links to /connect/{provider} (no query params needed)
+		 */
+		reply.send({ hello: 'world' })
+	})
+
+	// Register Grant middleware
+	void fastify.register(
+		grant.default.fastify({
+			defaults: {
+				origin: ORIGIN,
+				transport: "session", // Response data goes to session
+				state: true,
+				prefix: "/connect",
+				callback: "/auth/callback", // Our custom callback route
+			},
+			...grantOptions,
+		})
+	)
+
+	// Our custom callback route - receives all OAuth responses
+	fastify.get('/auth/callback', async (request, reply) => {
+		// Access Grant's session data
+		const grantSession = request.session.grant
+
+		if (!grantSession) {
+			fastify.log.error('OAuth callback missing grant session')
+			return reply.status(400).send({ error: 'Invalid OAuth callback' })
+		}
+
+		// The response data from OAuth provider
+		const response = grantSession.response as RawGrant['response'] | undefined
+		const provider = grantSession.provider as string
+
+		if (!response || !provider) {
+			fastify.log.error('OAuth callback missing response or provider')
+			return reply.status(400).send({ error: 'Invalid OAuth response' })
+		}
+
+		// Extract user data from OAuth response
+		const grantData = getGrantData({ provider, state: '', response })
+		if (!grantData) {
+			fastify.log.error('Failed to extract grant data', { provider })
+			return reply.status(400).send({ error: 'Invalid OAuth response' })
+		}
+
+		// Read redirect destination from temporary cookies
+		const redirectHost = request.cookies.redirect_host as string | undefined
+		const redirectPath = request.cookies.redirect_path as string | undefined
+
+		// Create session for existing user
+		const sessionId = sessionManager.createSessionForProvider(
+			grantData.provider,
+			grantData.id
+		)
+
+		if (!sessionId) {
+			// User not found - redirect to sign-up flow
+			fastify.log.warn('OAuth sign-in for non-existent user', {
+				provider: grantData.provider,
+				providerId: grantData.id,
+				email: grantData.email
+			})
+
+			// Clear any existing session cookie
+			reply.clearCookie(COOKIE_NAME, {
+				domain: domain === 'localhost' ? undefined : `.${domain}`,
+				path: '/'
+			})
+
+			// Keep redirect cookies for after sign-up completes
+			// Redirect to root for sign-up
+			return reply.redirect(ORIGIN)
+		}
+
+		// User found - create session and redirect back to app
+
+		// Encrypt session ID for cookie
+		const encryptedCookie = sessionManager.encryptSessionCookie(sessionId)
+
+		// Set session cookie for all subdomains
+		reply.setCookie(COOKIE_NAME, encryptedCookie, {
+			httpOnly: true,
+			secure: domain !== 'localhost', // HTTPS only in production
+			domain: domain === 'localhost' ? undefined : `.${domain}`, // Share across *.example.com
+			sameSite: 'lax', // CSRF protection
+			maxAge: 50 * 24 * 60 * 60, // 50 days in seconds
+			path: '/'
+		})
+
+		// Clear temporary redirect cookies
+		reply.clearCookie('redirect_host', {
+			domain: domain === 'localhost' ? undefined : `.${domain}`,
+			path: '/'
+		})
+		reply.clearCookie('redirect_path', {
+			domain: domain === 'localhost' ? undefined : `.${domain}`,
+			path: '/'
+		})
+
+		// Build redirect URL from temporary cookies
+		const validHost = (redirectHost && validateRedirectHost(redirectHost)) ? redirectHost : domain
+		const protocol = domain === 'localhost' ? 'http' : 'https'
+		const redirectUrl = `${protocol}://${validHost}${redirectPath || '/'}`
+
+		fastify.log.info('OAuth sign-in successful', {
+			provider: grantData.provider,
+			redirectUrl
+		})
+
+		// Redirect back to application
+		return reply.redirect(redirectUrl)
+	})
+
 	fastify.listen({ port: Number(PORT) }, function (err, address) {
 		if (err) {
 			fastify.log.error(err)

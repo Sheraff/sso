@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3"
 import { encrypt } from "./encryption.ts"
+import crypto from "node:crypto"
 
 /**
  * Creates a session manager with prepared statements for efficient database operations.
@@ -29,6 +30,19 @@ export function createSessionManager(db: Database.Database) {
 		UPDATE sessions 
 		SET expires_at = datetime('now', '+50 days')
 		WHERE id = ?
+	`)
+
+	// Prepared statement for creating a new session
+	const createSessionStmt = db.prepare<[string, string, string]>(`
+		INSERT INTO sessions (id, user_id, session, expires_at)
+		VALUES (?, ?, ?, datetime('now', '+50 days'))
+	`)
+
+	// Prepared statement to lookup user by provider account
+	const getUserByProviderStmt = db.prepare<[string, string], { user_id: string }>(`
+		SELECT user_id
+		FROM accounts
+		WHERE provider = ? AND provider_user_id = ?
 	`)
 
 	return {
@@ -62,6 +76,31 @@ export function createSessionManager(db: Database.Database) {
 		 */
 		encryptSessionCookie(sessionId: string): string {
 			return encrypt(sessionId)
+		},
+
+		/**
+		 * Creates a new session for a user identified by provider credentials.
+		 * Looks up the user by provider and provider_user_id, then creates a session.
+		 * 
+		 * @param provider - OAuth provider name (e.g., "github", "google")
+		 * @param providerUserId - User ID from the OAuth provider
+		 * @returns Session ID if user found, null if no matching account exists
+		 */
+		createSessionForProvider(provider: string, providerUserId: string): string | null {
+			// Look up user by provider account
+			const userRow = getUserByProviderStmt.get(provider, providerUserId)
+			if (!userRow) return null
+
+			// Generate new session ID
+			const sessionId = crypto.randomUUID()
+
+			// Create session with metadata
+			const sessionData = JSON.stringify({
+				createdAt: new Date().toISOString()
+			})
+			createSessionStmt.run(sessionId, userRow.user_id, sessionData)
+
+			return sessionId
 		},
 	}
 }

@@ -24,19 +24,17 @@ const buildRedirect = (targetHost: string, targetPath?: string): string => {
 	return url.toString()
 }
 
-const getDb = (): Database.Database => {
-	const db = new Database(process.env.DATABASE_PATH)
+const db = new Database(process.env.DATABASE_PATH)
+{
 	db.pragma("journal_mode = WAL")
 	db.pragma("synchronous = NORMAL")
 	const schema = readFileSync(new URL('./src/schema.sql', import.meta.url), 'utf-8')
 	db.exec(schema)
-	return db
 }
+const sessionManager = createSessionManager(db)
 
 ipc.serve(
 	() => {
-		const db = getDb()
-		const sessionManager = createSessionManager(db)
 
 		ipc.server.on(
 			'checkAuth',
@@ -110,4 +108,4 @@ ipc.serve(
 )
 
 ipc.server.start()
-webServer()
+webServer(sessionManager)
