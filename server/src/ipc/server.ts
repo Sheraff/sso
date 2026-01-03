@@ -115,9 +115,11 @@ function registerInvitationCodeHandler(invitationManager: InvitationManager) {
 export function ipcServer(sessionManager: SessionManager, invitationManager: InvitationManager) {
 	ipc.config.id = SERVER_ID
 	ipc.config.retry = 1500
-	ipc.config.logger = logger.info.bind(logger)
+	const ipcLogger = logger.child({ component: 'ipc-server' })
+	ipc.config.logger = ipcLogger.info.bind(ipcLogger)
 
 	ipc.serve(
+		`/tmp/sso-${SERVER_ID}.sock`,
 		() => {
 			registerCheckAuthHandler(sessionManager)
 			registerInvitationCodeHandler(invitationManager)

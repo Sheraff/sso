@@ -98,7 +98,7 @@ export function createSsoClient(name: string): SsoClient {
 
 	let state: ConnectionState = 'connecting'
 
-	ipc.connectTo(SERVER_ID, () => {
+	ipc.connectTo(SERVER_ID, `/tmp/sso-${SERVER_ID}.sock`, () => {
 		ipc.of[SERVER_ID].on('error', (err) => {
 			console.error('[SSO CLIENT] Connection error:', err.message || err)
 		})
