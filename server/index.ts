@@ -11,18 +11,6 @@ ipc.config.retry = 1500
 
 const schema = readFileSync(new URL('./src/schema.sql', import.meta.url), 'utf-8')
 
-type AuthCheckResult = {
-	authenticated: true,
-	user: {
-		id: string
-		email: string
-	}
-	cookie?: string
-} | {
-	authenticated: false,
-	redirect: string
-}
-
 ipc.serve(
 	() => {
 		const db = new Database(process.env.DATABASE_PATH)

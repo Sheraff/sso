@@ -168,7 +168,7 @@ The `generateCode()` function:
 
 TODO: add `pnpm invite` script in package.json to generate and store codes
 1. import client
-2. call server through IPC to ask for new code
+2. call server through IPC to ask for new code (`getInvitationCode()`)
 3. log generated code to the console
 4. exit
 

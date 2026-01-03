@@ -4,7 +4,20 @@ export type ServerID = 'world'
 const SERVER_ID: ServerID = 'world'
 
 type SsoClient = {
+	getInvitationCode: () => Promise<string>
+	checkAuth: (sessionCookie: string | undefined) => Promise<AuthCheckResult>
+}
 
+export type AuthCheckResult = {
+	authenticated: true,
+	user: {
+		id: string
+		email: string
+	}
+	cookie?: string
+} | {
+	authenticated: false,
+	redirect: string
 }
 
 
@@ -41,7 +54,10 @@ function createSsoClient(name: string): SsoClient {
 
 	connect()
 
-	return {}
+	return {
+		getInvitationCode: () => { },
+		checkAuth: (sessionCookie) => { },
+	}
 }
 
 const ipc = new NodeIPC.IPC()
