@@ -21,6 +21,14 @@ export function createInvitationManager(db: Database.Database) {
 		LIMIT 1
 	`)
 
+	const consumeInviteStmt = db.prepare<[code: string]>(`
+		DELETE FROM invites
+		WHERE code = ?
+	`)
+
+	let lastAttemptTime = 0
+	let attemptBatchCount = 0
+
 	return {
 		/**
 		 * Generates a new invitation code and stores it in the database.
@@ -38,8 +46,24 @@ export function createInvitationManager(db: Database.Database) {
 
 			return code
 		},
-		checkInvitationCode(code: string): boolean {
-			return !!getInviteStmt.get(code)
+		checkInvitationCode(code: string): Promise<boolean> {
+			const invited = !!getInviteStmt.get(code)
+			if (!invited) {
+				// Rate limit failed attempts to prevent brute-forceing
+				const now = Date.now()
+				if (now - lastAttemptTime < 60_000) {
+					attemptBatchCount++
+				} else {
+					attemptBatchCount = 1
+				}
+				lastAttemptTime = now
+				const delay = Math.min(attemptBatchCount ** 2 * 500, 60_000) // Max 60 seconds
+				return new Promise((resolve) => setTimeout(() => resolve(false), delay).unref())
+			}
+			return new Promise((resolve) => setTimeout(() => resolve(true), 1000)) // Consistent 1 second delay on success
+		},
+		consumeInvitationCode(code: string): void {
+			consumeInviteStmt.run(code)
 		}
 	}
 }

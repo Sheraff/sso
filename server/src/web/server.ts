@@ -8,6 +8,7 @@ import { domain, ORIGIN, validateRedirectHost } from "../domain.ts"
 import type { CookieName } from "@sso/client"
 import { type SessionManager } from "../sessions.ts"
 import type { InvitationManager } from "../invitations/invitations.ts"
+import { decrypt } from "../encryption.ts"
 
 // Extend Fastify session types
 declare module '@fastify/session' {
@@ -43,8 +44,13 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 	// Root page - sets redirect cookies
 	fastify.get<{ Querystring: { host?: string, path?: string } }>('/', function (request, reply) {
 		// Get redirect parameters from query
-		const host = request.query.host
-		const path = request.query.path
+		let host = request.query.host
+		if (!host && request.headers.referer) {
+			try {
+				host = new URL(request.headers.referer).hostname
+			} catch { }
+		}
+
 
 		// Set temporary cookies to preserve redirect destination through OAuth flow
 		if (host) {
@@ -56,6 +62,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 				maxAge: 600, // 10 minutes - just long enough for OAuth flow
 				path: '/'
 			})
+			const path = request.query.path
 			if (path) {
 				reply.setCookie('redirect_path', path, {
 					httpOnly: true,
@@ -92,10 +99,10 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 	})
 
 	// Submit route - validates invitation code and redirects
-	fastify.get<{ Querystring: { inviteCode?: string }, Params: { provider: string } }>('/submit/:provider', function (request, reply) {
+	fastify.get<{ Querystring: { inviteCode?: string }, Params: { provider: string } }>('/submit/:provider', async function (request, reply) {
 		const { provider } = request.params
 
-		if (!(provider in grantOptions)) {
+		if (!(provider in grantOptions) || !grantOptions[provider as keyof typeof grantOptions]) {
 			return reply.redirect('/', 304)
 		}
 
@@ -107,7 +114,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		}
 
 		// Validate invitation code
-		const invited = invitationManager.checkInvitationCode(inviteCode)
+		const invited = await invitationManager.checkInvitationCode(inviteCode)
 
 		if (!invited) {
 			// Invalid or expired code - redirect back to root
@@ -183,7 +190,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			}
 
 			// Validate invitation code and create user
-			if (inviteCode && invitationManager.checkInvitationCode(inviteCode)) {
+			if (inviteCode && await invitationManager.checkInvitationCode(inviteCode)) {
 				// Valid invitation - create new user with provider account and session
 				fastify.log.info({
 					provider: grantData.provider,
@@ -192,11 +199,23 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 					inviteCode
 				}, 'Creating new user with invitation code')
 
+				let previousSessionId: string | undefined
+				const sessionCookie = request.cookies[COOKIE_NAME]
+				if (sessionCookie) {
+					const result = decrypt(sessionCookie)
+					if ('success' in result) {
+						previousSessionId = result.success
+					}
+				}
+
 				sessionId = sessionManager.createUserWithProvider(
 					grantData.provider,
 					grantData.id,
-					grantData.email
+					grantData.email,
+					previousSessionId
 				)
+
+				invitationManager.consumeInvitationCode(inviteCode)
 
 				// Continue to session cookie creation below
 			}

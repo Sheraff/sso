@@ -45,6 +45,12 @@ export function createSessionManager(db: Database.Database) {
 		WHERE provider = ? AND provider_user_id = ?
 	`)
 
+	const getAccountByUserStmt = db.prepare<[user_id: string, provider: string], { id: string }>(`
+		SELECT id
+		FROM accounts
+		WHERE user_id = ? AND provider = ?
+	`)
+
 	// Prepared statement to create a new user
 	const createUserStmt = db.prepare<[string, string]>(`
 		INSERT INTO users (id, email)
@@ -122,21 +128,39 @@ export function createSessionManager(db: Database.Database) {
 		 * @param provider - OAuth provider name (e.g., "github", "google")
 		 * @param providerUserId - User ID from the OAuth provider
 		 * @param email - User's email address
+		 * @param previousSessionId - existing session, if valid, accounts will be linked (optional)
 		 * @returns Session ID for the newly created user
 		 */
-		createUserWithProvider(provider: string, providerUserId: string, email: string): string {
-			// Generate IDs
-			const userId = crypto.randomUUID()
-			const accountId = crypto.randomUUID()
-			const sessionId = crypto.randomUUID()
+		createUserWithProvider(provider: string, providerUserId: string, email: string, previousSessionId?: string): string {
+			let userId: string | null = null
+			let accountId: string | null = null
+
+			if (previousSessionId) {
+				// Check if previous session is valid
+				const session = this.getSessionWithUser(previousSessionId)
+				if (session) {
+					userId = session.user_id
+					const account = getAccountByUserStmt.get(userId, provider)
+					if (account) {
+						accountId = account.id
+					}
+				}
+			}
 
 			// Create user
-			createUserStmt.run(userId, email)
+			if (!userId) {
+				userId = crypto.randomUUID()
+				createUserStmt.run(userId, email)
+			}
 
 			// Create provider account
-			createAccountStmt.run(accountId, userId, provider, providerUserId)
+			if (!accountId) {
+				accountId = crypto.randomUUID()
+				createAccountStmt.run(accountId, userId, provider, providerUserId)
+			}
 
 			// Create session
+			const sessionId = crypto.randomUUID()
 			const sessionData = JSON.stringify({
 				createdAt: new Date().toISOString()
 			})
