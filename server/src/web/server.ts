@@ -19,11 +19,6 @@ declare module '@fastify/session' {
 	}
 }
 
-interface RootQuerystring {
-	host?: string
-	path?: string
-}
-
 const PORT = process.env.PORT!
 if (!PORT) throw new Error("PORT not set in environment")
 
@@ -46,7 +41,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 	})
 
 	// Root page - sets redirect cookies
-	fastify.get<{ Querystring: RootQuerystring }>('/', function (request, reply) {
+	fastify.get<{ Querystring: { host?: string, path?: string } }>('/', function (request, reply) {
 		// Get redirect parameters from query
 		const host = request.query.host
 		const path = request.query.path
@@ -61,18 +56,18 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 				maxAge: 600, // 10 minutes - just long enough for OAuth flow
 				path: '/'
 			})
+			if (path) {
+				reply.setCookie('redirect_path', path, {
+					httpOnly: true,
+					secure: domain !== 'localhost',
+					domain: domain === 'localhost' ? undefined : `.${domain}`,
+					sameSite: 'lax',
+					maxAge: 600, // 10 minutes
+					path: '/'
+				})
+			}
 		}
 
-		if (path) {
-			reply.setCookie('redirect_path', path, {
-				httpOnly: true,
-				secure: domain !== 'localhost',
-				domain: domain === 'localhost' ? undefined : `.${domain}`,
-				sameSite: 'lax',
-				maxAge: 600, // 10 minutes
-				path: '/'
-			})
-		}
 
 		/**
 		 * Serve a web page that allows
@@ -99,6 +94,11 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 	// Submit route - validates invitation code and redirects
 	fastify.get<{ Querystring: { inviteCode?: string }, Params: { provider: string } }>('/submit/:provider', function (request, reply) {
 		const { provider } = request.params
+
+		if (!(provider in grantOptions)) {
+			return reply.redirect('/', 304)
+		}
+
 		const inviteCode = request.query.inviteCode?.trim()
 
 		// No invitation code - normal sign-in flow
@@ -152,24 +152,17 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		}
 
 		// The response data from OAuth provider
-		const response = grantSession.response as RawGrant['response'] | undefined
-		const provider = grantSession.provider as string
-
-		if (!response || !provider) {
+		if (!grantSession.response || !grantSession.provider) {
 			fastify.log.error('OAuth callback missing response or provider')
 			return reply.status(400).send({ error: 'Invalid OAuth response' })
 		}
 
 		// Extract user data from OAuth response
-		const grantData = getGrantData({ provider, state: '', response })
+		const grantData = getGrantData(grantSession as RawGrant)
 		if (!grantData) {
-			fastify.log.error({ provider }, 'Failed to extract grant data')
+			fastify.log.error({ provider: grantSession.provider }, 'Failed to extract grant data')
 			return reply.status(400).send({ error: 'Invalid OAuth response' })
 		}
-
-		// Read redirect destination from temporary cookies
-		const redirectHost = request.cookies.redirect_host as string | undefined
-		const redirectPath = request.cookies.redirect_path as string | undefined
 
 		// Create session for existing user
 		let sessionId = sessionManager.createSessionForProvider(
@@ -179,7 +172,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 
 		if (!sessionId) {
 			// User not found - check for invitation code
-			const inviteCode = request.cookies.invite_code as string | undefined
+			const inviteCode = request.cookies.invite_code
 
 			// Clear invitation code cookie if present
 			if (inviteCode) {
@@ -254,9 +247,16 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		})
 
 		// Build redirect URL from temporary cookies
-		const validHost = (redirectHost && validateRedirectHost(redirectHost)) ? redirectHost : domain
+		const redirectHost = request.cookies.redirect_host
+		const redirectPath = request.cookies.redirect_path
+		let redirectUrl
 		const protocol = domain === 'localhost' ? 'http' : 'https'
-		const redirectUrl = `${protocol}://${validHost}${redirectPath || '/'}`
+		if (redirectHost && validateRedirectHost(redirectHost)) {
+			const host = redirectHost
+			redirectUrl = `${protocol}://${host}${redirectPath || '/'}`
+		} else {
+			redirectUrl = `${protocol}://${domain}`
+		}
 
 		fastify.log.info({
 			provider: grantData.provider,

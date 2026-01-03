@@ -6,7 +6,6 @@ import * as Github from "./github.ts"
 
 export type RawGrant = {
 	provider: string
-	state: string
 	response: {
 		id_token: string
 		access_token: string
