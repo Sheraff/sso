@@ -3,10 +3,10 @@ import cookie from '@fastify/cookie'
 import session from '@fastify/session'
 import grant from "grant"
 import { readFileSync } from 'node:fs'
-import { grantOptions, getGrantData, type RawGrant } from "#/providers/index.ts"
-import { domain, ORIGIN, validateRedirectHost } from "#/domain.ts"
+import { grantOptions, getGrantData, type RawGrant } from "../providers/index.ts"
+import { domain, ORIGIN, validateRedirectHost } from "../domain.ts"
 import type { CookieName } from "@sso/client"
-import { type SessionManager } from "#/sessions.ts"
+import { type SessionManager } from "../sessions.ts"
 
 // Extend Fastify session types
 declare module '@fastify/session' {

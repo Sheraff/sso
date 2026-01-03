@@ -1,8 +1,8 @@
-import * as Twitch from "#/providers/twitch.ts"
-import * as Google from "#/providers/google.ts"
-import * as Spotify from "#/providers/spotify.ts"
-import * as Discord from "#/providers/discord.ts"
-import * as Github from "#/providers/github.ts"
+import * as Twitch from "./twitch.ts"
+import * as Google from "./google.ts"
+import * as Spotify from "./spotify.ts"
+import * as Discord from "./discord.ts"
+import * as Github from "./github.ts"
 
 export type RawGrant = {
 	provider: string

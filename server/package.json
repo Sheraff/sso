@@ -4,9 +4,6 @@
 	"version": "1.0.0",
 	"description": "",
 	"main": "index.ts",
-	"imports": {
-		"#/*": "./src/*"
-	},
 	"scripts": {
 		"start": "node index.ts",
 		"invite": "node invite.ts",

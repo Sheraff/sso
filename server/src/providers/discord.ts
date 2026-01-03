@@ -1,6 +1,6 @@
 import { type GrantProvider } from "grant"
 import { object, parse, string } from "valibot"
-import { type GrantData, type RawGrant } from "#/providers/index.ts"
+import { type GrantData, type RawGrant } from "./index.ts"
 
 const client_id = process.env.DISCORD_CLIENT_ID
 const client_secret = process.env.DISCORD_CLIENT_SECRET

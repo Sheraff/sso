@@ -1,5 +1,5 @@
 import { type GrantProvider } from "grant"
-import { type GrantData, type RawGrant } from "#/providers/index.ts"
+import { type GrantData, type RawGrant } from "./index.ts"
 import { array, minLength, object, parse, string, pipe } from "valibot"
 
 const client_id = process.env.TWITCH_CLIENT_ID

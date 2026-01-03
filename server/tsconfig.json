@@ -7,11 +7,6 @@
 		"moduleResolution": "NodeNext",
 		"emitDeclarationOnly": true,
 		"allowImportingTsExtensions": true,
-		"paths": {
-			"#/*": [
-				"./src/*"
-			]
-		}
 	},
 	"include": [
 		"index.ts",
