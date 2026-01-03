@@ -6,6 +6,7 @@ import { webServer } from "./src/web/server.ts"
 import { createSessionManager } from "./src/sessions.ts"
 import { decrypt } from "./src/encryption.ts"
 import { domain, ORIGIN, validateRedirectHost } from "./src/domain.ts"
+import { generateCode } from "./src/invitations/generateCode.ts"
 
 const SERVER_ID: ServerID = 'world'
 const COOKIE_NAME: CookieName = 'sso_session'
@@ -102,6 +103,51 @@ ipc.serve(
 						cookie: newCookie,
 					} satisfies AuthCheckResult
 				})
+			}
+		)
+
+		ipc.server.on(
+			'getInvitationCode',
+			(data: { id: number }, socket) => {
+				const { id } = data
+
+				try {
+					// Check if we already have a valid code
+					const existingCode = db.prepare(`
+						SELECT code FROM invites
+						WHERE expires_at > datetime('now')
+						LIMIT 1
+					`).get() as { code: string } | undefined
+
+					if (existingCode) {
+						ipc.server.emit(socket, 'getInvitationCode', {
+							id,
+							code: existingCode.code
+						})
+						return
+					}
+
+					// Generate new code
+					const code = generateCode()
+					const expiresAt = new Date()
+					expiresAt.setDate(expiresAt.getDate() + 30) // 30 days from now
+
+					db.prepare(`
+						INSERT INTO invites (code, expires_at)
+						VALUES (?, datetime(?))
+					`).run(code, expiresAt.toISOString())
+
+					ipc.server.emit(socket, 'getInvitationCode', {
+						id,
+						code
+					})
+				} catch (error) {
+					console.error('Failed to generate invitation code:', error)
+					ipc.server.emit(socket, 'getInvitationCode', {
+						id,
+						error: error instanceof Error ? error.message : 'Unknown error'
+					})
+				}
 			}
 		)
 	}

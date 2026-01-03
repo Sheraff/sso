@@ -206,7 +206,43 @@ export function createSsoClient(name: string): SsoClient {
 	}
 
 	const getInvitationCode: SsoClient['getInvitationCode'] = () => {
-		throw new Error('Not implemented')
+		const id = messageId++
+		return new Promise<string>((resolve, reject) => {
+			if (!connected) {
+				reject(new Error('Not connected to SSO server'))
+				return
+			}
+
+			// Set up timeout (5 seconds)
+			const timeout = setTimeout(() => {
+				cleanup()
+				reject(new Error('Timeout waiting for invitation code'))
+			}, 5000)
+
+			// Set up one-time response handler
+			const responseHandler = (data: { id: number, code?: string, error?: string }) => {
+				if (data.id !== id) return
+				cleanup()
+				if (data.error) {
+					reject(new Error(data.error))
+				} else if (data.code) {
+					resolve(data.code)
+				} else {
+					reject(new Error('Invalid response from server'))
+				}
+			}
+
+			const cleanup = () => {
+				clearTimeout(timeout)
+				ipc.of[SERVER_ID].off('getInvitationCode', responseHandler)
+			}
+
+			// Register response handler
+			ipc.of[SERVER_ID].on('getInvitationCode', responseHandler)
+
+			// Send request
+			ipc.of[SERVER_ID].emit('getInvitationCode', { id })
+		})
 	}
 
 	return {
