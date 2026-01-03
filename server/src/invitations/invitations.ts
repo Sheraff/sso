@@ -26,6 +26,16 @@ export function createInvitationManager(db: Database.Database) {
 		WHERE code = ?
 	`)
 
+	let timeoutId: NodeJS.Timeout | null = null
+	function scheduleCleanup() {
+		if (timeoutId) clearTimeout(timeoutId)
+		timeoutId = setTimeout(() => {
+			timeoutId = null
+			// Clean up expired invitations
+			db.prepare(`DELETE FROM invites WHERE expires_at <= datetime('now')`).run()
+		}, 30_000).unref()
+	}
+
 	let lastAttemptTime = 0
 	let attemptBatchCount = 0
 
@@ -36,6 +46,8 @@ export function createInvitationManager(db: Database.Database) {
 		 * @returns The newly generated invitation code
 		 */
 		generateInvitationCode(): string {
+			scheduleCleanup()
+
 			// Generate new code
 			const existingCodes = getCodesStmt.all().map(c => c.code)
 			const code = generateCode(existingCodes)
@@ -63,6 +75,7 @@ export function createInvitationManager(db: Database.Database) {
 			return new Promise((resolve) => setTimeout(() => resolve(true), 1000)) // Consistent 1 second delay on success
 		},
 		consumeInvitationCode(code: string): void {
+			scheduleCleanup()
 			consumeInviteStmt.run(code)
 		}
 	}

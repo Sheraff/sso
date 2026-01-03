@@ -1,8 +1,7 @@
 import ipc from 'node-ipc'
 import type { AuthCheck, InvitationCode, ServerID } from "@sso/client"
-import { decrypt } from "../encryption.ts"
 import { domain, ORIGIN, validateRedirectHost } from "../domain.ts"
-import type { SessionManager } from "../sessions.ts"
+import type { SessionManager } from "../sessions/sessions.ts"
 import type { InvitationManager } from "../invitations/invitations.ts"
 
 const SERVER_ID: ServerID = 'world'
@@ -38,7 +37,7 @@ function registerCheckAuthHandler(sessionManager: SessionManager) {
 			}
 
 			// Decrypt session cookie
-			const decryptResult = decrypt(sessionCookie)
+			const decryptResult = sessionManager.decryptSessionCookie(sessionCookie)
 			if ('error' in decryptResult) {
 				// Log potential tampering attempt
 				console.warn('[SECURITY] Cookie decryption failed:', {

@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3"
-import { decrypt, encrypt } from "./sessions/encryption.ts"
+import { decrypt, encrypt } from "./encryption.ts"
 import crypto from "node:crypto"
 
 /**
@@ -63,11 +63,27 @@ export function createSessionManager(db: Database.Database) {
 		VALUES (?, ?, ?, ?)
 	`)
 
+	let timeoutId: NodeJS.Timeout | null = null
+	function scheduleCleanup() {
+		if (timeoutId) clearTimeout(timeoutId)
+		timeoutId = setTimeout(() => {
+			timeoutId = null
+			// Clean up expired sessions
+			db.prepare(`DELETE FROM sessions WHERE expires_at <= datetime('now')`).run()
+		}, 30_000).unref()
+	}
 
-	setInterval(() => {
-		// Periodically clean up expired sessions
-		db.prepare(`DELETE FROM sessions WHERE expires_at <= datetime('now')`).run()
-	}, 60 * 60 * 1000).unref() // Run every hour
+	function createSession(userId: string): string {
+		scheduleCleanup()
+
+		const sessionId = crypto.randomUUID()
+		const sessionData = JSON.stringify({
+			createdAt: new Date().toISOString()
+		})
+		createSessionStmt.run(sessionId, userId, sessionData)
+
+		return sessionId
+	}
 
 	return {
 		/**
@@ -78,6 +94,7 @@ export function createSessionManager(db: Database.Database) {
 		 * @returns Session with user data, or null if not found/expired
 		 */
 		getSessionWithUser(sessionId: string): SessionRow | null {
+			scheduleCleanup()
 			return getSessionStmt.get(sessionId) ?? null
 		},
 
@@ -118,17 +135,7 @@ export function createSessionManager(db: Database.Database) {
 			// Look up user by provider account
 			const userRow = getUserByProviderStmt.get(provider, providerUserId)
 			if (!userRow) return null
-
-			// Generate new session ID
-			const sessionId = crypto.randomUUID()
-
-			// Create session with metadata
-			const sessionData = JSON.stringify({
-				createdAt: new Date().toISOString()
-			})
-			createSessionStmt.run(sessionId, userRow.user_id, sessionData)
-
-			return sessionId
+			return createSession(userRow.user_id)
 		},
 
 		/**
@@ -169,14 +176,7 @@ export function createSessionManager(db: Database.Database) {
 				createAccountStmt.run(accountId, userId, provider, providerUserId)
 			}
 
-			// Create session
-			const sessionId = crypto.randomUUID()
-			const sessionData = JSON.stringify({
-				createdAt: new Date().toISOString()
-			})
-			createSessionStmt.run(sessionId, userId, sessionData)
-
-			return sessionId
+			return createSession(userId)
 		},
 	}
 }

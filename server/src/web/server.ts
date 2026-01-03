@@ -6,17 +6,13 @@ import { readFileSync } from 'node:fs'
 import { grantOptions, getGrantData, type RawGrant } from "../providers/index.ts"
 import { domain, ORIGIN, validateRedirectHost } from "../domain.ts"
 import type { CookieName } from "@sso/client"
-import { type SessionManager } from "../sessions.ts"
+import { type SessionManager } from "../sessions/sessions.ts"
 import type { InvitationManager } from "../invitations/invitations.ts"
-import { decrypt } from "../encryption.ts"
 
 // Extend Fastify session types
 declare module '@fastify/session' {
 	interface FastifySessionObject {
-		grant?: {
-			provider?: string
-			response?: RawGrant['response']
-		}
+		grant?: RawGrant
 	}
 }
 
@@ -158,14 +154,8 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			return reply.status(400).send({ error: 'Invalid OAuth callback' })
 		}
 
-		// The response data from OAuth provider
-		if (!grantSession.response || !grantSession.provider) {
-			fastify.log.error('OAuth callback missing response or provider')
-			return reply.status(400).send({ error: 'Invalid OAuth response' })
-		}
-
 		// Extract user data from OAuth response
-		const grantData = getGrantData(grantSession as RawGrant)
+		const grantData = getGrantData(grantSession)
 		if (!grantData) {
 			fastify.log.error({ provider: grantSession.provider }, 'Failed to extract grant data')
 			return reply.status(400).send({ error: 'Invalid OAuth response' })
@@ -202,7 +192,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 				let previousSessionId: string | undefined
 				const sessionCookie = request.cookies[COOKIE_NAME]
 				if (sessionCookie) {
-					const result = decrypt(sessionCookie)
+					const result = sessionManager.decryptSessionCookie(sessionCookie)
 					if ('success' in result) {
 						previousSessionId = result.success
 					}

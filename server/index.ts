@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import Database from "better-sqlite3"
 import { webServer } from "./src/web/server.ts"
-import { createSessionManager } from "./src/sessions.ts"
+import { createSessionManager } from "./src/sessions/sessions.ts"
 import { createInvitationManager } from "./src/invitations/invitations.ts"
 import { ipcServer } from "./src/ipc/server.ts"
 
