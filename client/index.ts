@@ -6,6 +6,8 @@ const SERVER_ID: ServerID = 'world'
 export type CookieName = 'sso_session'
 export const COOKIE_NAME: CookieName = 'sso_session'
 
+type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'destroyed'
+
 type SsoClient = {
 	getInvitationCode: () => Promise<string>
 	checkAuth: (sessionCookie: string | undefined, host: string, path: string) => Promise<AuthCheck.Result['message']>
@@ -92,26 +94,30 @@ export function createSsoClient(name: string): SsoClient {
 	const id = `${name}-${Math.random().toString(16).slice(2)}`
 	ipc.config.id = id
 	ipc.config.retry = 1000
+	ipc.config.silent = false
 
-	let connected = false
+	let state: ConnectionState = 'connecting'
 
-	function connect() {
-		connected = false
-		const interval = setInterval(() => {
-			console.warn('[SSO CLIENT] Attempting to connect to SSO server...')
-		}).unref()
-		ipc.connectTo(
-			SERVER_ID,
-			() => {
-				ipc.of[SERVER_ID].on('disconnect', connect)
-				ipc.of[SERVER_ID].on('connect', () => {
-					connected = true
-					clearInterval(interval)
-				})
-			}
-		)
-	}
-	connect()
+	ipc.connectTo(SERVER_ID, () => {
+		ipc.of[SERVER_ID].on('error', (err) => {
+			console.error('[SSO CLIENT] Connection error:', err.message || err)
+		})
+
+		ipc.of[SERVER_ID].on('connect', () => {
+			state = 'connected'
+			console.log('[SSO CLIENT] Connected to SSO server')
+		})
+
+		ipc.of[SERVER_ID].on('disconnect', () => {
+			state = 'connecting'
+			console.warn('[SSO CLIENT] Disconnected from SSO server, auto-reconnecting...')
+		})
+
+		ipc.of[SERVER_ID].on('destroy', () => {
+			state = 'destroyed'
+			console.error('[SSO CLIENT] Connection destroyed')
+		})
+	})
 
 	let messageId = 0
 
@@ -165,9 +171,10 @@ export function createSsoClient(name: string): SsoClient {
 	 * ```
 	 */
 	const checkAuth: SsoClient['checkAuth'] = (sessionCookie, host, path) => {
+		if (state === 'destroyed') throw new Error('SSO client is destroyed')
 		const id = messageId++
 		return new Promise<AuthCheck.Result['message']>((resolve, reject) => {
-			if (!connected) {
+			if (state !== 'connected') {
 				reject(new Error('Not connected to SSO server'))
 				return
 			}
@@ -228,13 +235,14 @@ export function createSsoClient(name: string): SsoClient {
 	 */
 	const disconnect: SsoClient['disconnect'] = () => {
 		ipc.disconnect(SERVER_ID)
-		connected = false
+		state = 'destroyed'
 	}
 
 	const getInvitationCode: SsoClient['getInvitationCode'] = () => {
+		if (state === 'destroyed') throw new Error('SSO client is destroyed')
 		const id = messageId++
 		return new Promise<string>((resolve, reject) => {
-			if (!connected) {
+			if (state !== 'connected') {
 				reject(new Error('Not connected to SSO server'))
 				return
 			}
