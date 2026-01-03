@@ -3,6 +3,7 @@ import type { AuthCheck, InvitationCode, ServerID } from "@sso/client"
 import { domain, ORIGIN, validateRedirectHost } from "../domain.ts"
 import type { SessionManager } from "../sessions/sessions.ts"
 import type { InvitationManager } from "../invitations/invitations.ts"
+import { logger } from '../logger.ts'
 
 const SERVER_ID: ServerID = 'world'
 
@@ -40,11 +41,10 @@ function registerCheckAuthHandler(sessionManager: SessionManager) {
 			const decryptResult = sessionManager.decryptSessionCookie(sessionCookie)
 			if ('error' in decryptResult) {
 				// Log potential tampering attempt
-				console.warn('[SECURITY] Cookie decryption failed:', {
-					timestamp: new Date().toISOString(),
+				logger.warn({
 					error: decryptResult.error.message,
 					host,
-				})
+				}, '[SECURITY] Cookie decryption failed')
 				ipc.server.emit(socket, 'checkAuth', {
 					id,
 					message: {
@@ -102,7 +102,7 @@ function registerInvitationCodeHandler(invitationManager: InvitationManager) {
 					message: { code }
 				} satisfies InvitationCode.Result)
 			} catch (error) {
-				console.error('Failed to generate invitation code:', error)
+				logger.error({ error }, 'Failed to generate invitation code')
 				ipc.server.emit(socket, 'getInvitationCode', {
 					id,
 					message: { error: error instanceof Error ? error.message : 'Unknown error' }
@@ -115,6 +115,7 @@ function registerInvitationCodeHandler(invitationManager: InvitationManager) {
 export function ipcServer(sessionManager: SessionManager, invitationManager: InvitationManager) {
 	ipc.config.id = SERVER_ID
 	ipc.config.retry = 1500
+	ipc.config.logger = logger.info.bind(logger)
 
 	ipc.serve(
 		() => {

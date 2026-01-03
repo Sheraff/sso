@@ -8,6 +8,7 @@ import { domain, ORIGIN, validateRedirectHost } from "../domain.ts"
 import type { CookieName } from "@sso/client"
 import { type SessionManager } from "../sessions/sessions.ts"
 import type { InvitationManager } from "../invitations/invitations.ts"
+import { logger } from '../logger.ts'
 
 // Extend Fastify session types
 declare module '@fastify/session' {
@@ -23,7 +24,7 @@ const COOKIE_NAME: CookieName = 'sso_session'
 export function webServer(sessionManager: SessionManager, invitationManager: InvitationManager) {
 
 	const fastify = Fastify({
-		logger: true
+		loggerInstance: logger
 	})
 
 	// Register cookie and session plugins (required by Grant)
