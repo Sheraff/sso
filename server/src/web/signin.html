@@ -164,22 +164,6 @@
 			</div>
 		</div>
 	</div>
-
-	<script>
-		document.querySelectorAll('.provider-btn').forEach(btn => {
-			btn.addEventListener('click', (e) => {
-				e.preventDefault()
-				const provider = btn.dataset.provider
-				const inviteCode = document.getElementById('inviteCode').value.trim()
-
-				if (inviteCode) {
-					document.cookie = 'invite_code=' + encodeURIComponent(inviteCode) + '; path=/; max-age=600; samesite=lax'
-				}
-
-				window.location.href = '/connect/' + provider
-			})
-		})
-	</script>
 </body>
 
 </html>

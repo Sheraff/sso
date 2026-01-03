@@ -87,7 +87,7 @@ export function webServer(sessionManager: SessionManager) {
 
 		// Inject provider buttons
 		const providerButtons = providers.map(([name]) =>
-			`<a href="#" class="provider-btn" data-provider="${name}">${name.charAt(0).toUpperCase() + name.slice(1)}</a>`
+			`<a href="/connect/${name}" class="provider-btn" data-provider="${name}">${name.charAt(0).toUpperCase() + name.slice(1)}</a>`
 		).join('\n\t\t\t\t')
 
 		html = html.replace('<!-- PROVIDER_BUTTONS -->', providerButtons)
