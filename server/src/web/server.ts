@@ -7,6 +7,7 @@ import { grantOptions, getGrantData, type RawGrant } from "../providers/index.ts
 import { domain, ORIGIN, validateRedirectHost } from "../domain.ts"
 import type { CookieName } from "@sso/client"
 import { type SessionManager } from "../sessions.ts"
+import type { InvitationManager } from "../invitations/invitations.ts"
 
 // Extend Fastify session types
 declare module '@fastify/session' {
@@ -27,7 +28,7 @@ const PORT = process.env.PORT!
 if (!PORT) throw new Error("PORT not set in environment")
 
 const COOKIE_NAME: CookieName = 'sso_session'
-export function webServer(sessionManager: SessionManager) {
+export function webServer(sessionManager: SessionManager, invitationManager: InvitationManager) {
 
 	const fastify = Fastify({
 		logger: true
@@ -87,12 +88,43 @@ export function webServer(sessionManager: SessionManager) {
 
 		// Inject provider buttons
 		const providerButtons = providers.map(([name]) =>
-			`<a href="/connect/${name}" class="provider-btn" data-provider="${name}">${name.charAt(0).toUpperCase() + name.slice(1)}</a>`
+			`<button type="submit" formaction="/submit/${name}" class="provider-btn">${name.charAt(0).toUpperCase() + name.slice(1)}</button>`
 		).join('\n\t\t\t\t')
 
 		html = html.replace('<!-- PROVIDER_BUTTONS -->', providerButtons)
 
 		reply.type('text/html').send(html)
+	})
+
+	// Submit route - validates invitation code and redirects
+	fastify.get<{ Querystring: { inviteCode?: string }, Params: { provider: string } }>('/submit/:provider', function (request, reply) {
+		const { provider } = request.params
+		const inviteCode = request.query.inviteCode?.trim()
+
+		// No invitation code - normal sign-in flow
+		if (!inviteCode) {
+			return reply.redirect(`/connect/${provider}`)
+		}
+
+		// Validate invitation code
+		const invited = invitationManager.checkInvitationCode(inviteCode)
+
+		if (!invited) {
+			// Invalid or expired code - redirect back to root
+			return reply.redirect('/')
+		}
+
+		// Valid code - store in cookie and redirect to OAuth
+		reply.setCookie('invite_code', inviteCode, {
+			httpOnly: true,
+			secure: domain !== 'localhost',
+			domain: domain === 'localhost' ? undefined : `.${domain}`,
+			sameSite: 'lax',
+			maxAge: 600, // 10 minutes
+			path: '/'
+		})
+
+		return reply.redirect(`/connect/${provider}`)
 	})
 
 	// Register Grant middleware
@@ -140,18 +172,50 @@ export function webServer(sessionManager: SessionManager) {
 		const redirectPath = request.cookies.redirect_path as string | undefined
 
 		// Create session for existing user
-		const sessionId = sessionManager.createSessionForProvider(
+		let sessionId = sessionManager.createSessionForProvider(
 			grantData.provider,
 			grantData.id
 		)
 
 		if (!sessionId) {
-			// User not found - redirect to sign-up flow
+			// User not found - check for invitation code
+			const inviteCode = request.cookies.invite_code as string | undefined
+
+			// Clear invitation code cookie if present
+			if (inviteCode) {
+				reply.clearCookie('invite_code', {
+					domain: domain === 'localhost' ? undefined : `.${domain}`,
+					path: '/'
+				})
+			}
+
+			// Validate invitation code and create user
+			if (inviteCode && invitationManager.checkInvitationCode(inviteCode)) {
+				// Valid invitation - create new user with provider account and session
+				fastify.log.info({
+					provider: grantData.provider,
+					providerId: grantData.id,
+					email: grantData.email,
+					inviteCode
+				}, 'Creating new user with invitation code')
+
+				sessionId = sessionManager.createUserWithProvider(
+					grantData.provider,
+					grantData.id,
+					grantData.email
+				)
+
+				// Continue to session cookie creation below
+			}
+		}
+
+		if (!sessionId) {
+			// No session and no valid invitation code - redirect to root for sign-up
 			fastify.log.warn({
 				provider: grantData.provider,
 				providerId: grantData.id,
 				email: grantData.email
-			}, 'OAuth sign-in for non-existent user')
+			}, 'OAuth sign-in for non-existent user without valid invitation')
 
 			// Clear any existing session cookie
 			reply.clearCookie(COOKIE_NAME, {

@@ -45,6 +45,18 @@ export function createSessionManager(db: Database.Database) {
 		WHERE provider = ? AND provider_user_id = ?
 	`)
 
+	// Prepared statement to create a new user
+	const createUserStmt = db.prepare<[string, string]>(`
+		INSERT INTO users (id, email)
+		VALUES (?, ?)
+	`)
+
+	// Prepared statement to create a new account
+	const createAccountStmt = db.prepare<[string, string, string, string]>(`
+		INSERT INTO accounts (id, user_id, provider, provider_user_id)
+		VALUES (?, ?, ?, ?)
+	`)
+
 	return {
 		/**
 		 * Retrieves a valid session with associated user data.
@@ -99,6 +111,36 @@ export function createSessionManager(db: Database.Database) {
 				createdAt: new Date().toISOString()
 			})
 			createSessionStmt.run(sessionId, userRow.user_id, sessionData)
+
+			return sessionId
+		},
+
+		/**
+		 * Creates a new user with a provider account and returns a session ID.
+		 * Used during sign-up flow with valid invitation codes.
+		 * 
+		 * @param provider - OAuth provider name (e.g., "github", "google")
+		 * @param providerUserId - User ID from the OAuth provider
+		 * @param email - User's email address
+		 * @returns Session ID for the newly created user
+		 */
+		createUserWithProvider(provider: string, providerUserId: string, email: string): string {
+			// Generate IDs
+			const userId = crypto.randomUUID()
+			const accountId = crypto.randomUUID()
+			const sessionId = crypto.randomUUID()
+
+			// Create user
+			createUserStmt.run(userId, email)
+
+			// Create provider account
+			createAccountStmt.run(accountId, userId, provider, providerUserId)
+
+			// Create session
+			const sessionData = JSON.stringify({
+				createdAt: new Date().toISOString()
+			})
+			createSessionStmt.run(sessionId, userId, sessionData)
 
 			return sessionId
 		},

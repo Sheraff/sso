@@ -150,19 +150,22 @@
 	<div class="container">
 		<h1>Sign In</h1>
 
-		<div class="section">
-			<div class="section-title">Sign Up (Invitation Code)</div>
-			<input type="text" id="inviteCode" placeholder="Enter invitation code" autocomplete="off" />
-		</div>
-
-		<hr>
-
-		<div class="section">
-			<div class="section-title">Continue With</div>
-			<div class="provider-buttons" id="providers">
-				<!-- PROVIDER_BUTTONS -->
+		<form method="get">
+			<div class="section">
+				<div class="section-title">Sign Up (Invitation Code)</div>
+				<input type="text" name="inviteCode" id="inviteCode" placeholder="Enter invitation code"
+					autocomplete="off" />
 			</div>
-		</div>
+
+			<hr>
+
+			<div class="section">
+				<div class="section-title">Continue With</div>
+				<div class="provider-buttons" id="providers">
+					<!-- PROVIDER_BUTTONS -->
+				</div>
+			</div>
+		</form>
 	</div>
 </body>
 

@@ -7,6 +7,7 @@ import { createSessionManager } from "./src/sessions.ts"
 import { decrypt } from "./src/encryption.ts"
 import { domain, ORIGIN, validateRedirectHost } from "./src/domain.ts"
 import { generateCode } from "./src/invitations/generateCode.ts"
+import { createInvitationManager } from "./src/invitations/invitations.ts"
 
 const SERVER_ID: ServerID = 'world'
 const COOKIE_NAME: CookieName = 'sso_session'
@@ -33,6 +34,7 @@ const db = new Database(process.env.DATABASE_PATH)
 	db.exec(schema)
 }
 const sessionManager = createSessionManager(db)
+const invitationManager = createInvitationManager(db)
 
 ipc.serve(
 	() => {
@@ -112,19 +114,7 @@ ipc.serve(
 				const { id } = data
 
 				try {
-					// Generate new code
-					const existingCodes = db.prepare(`
-						SELECT code FROM invites
-					`).all() as { code: string }[]
-					const code = generateCode(existingCodes.map(c => c.code))
-					const expiresAt = new Date()
-					expiresAt.setDate(expiresAt.getDate() + 30) // 30 days from now
-
-					db.prepare(`
-						INSERT INTO invites (code, expires_at)
-						VALUES (?, datetime(?))
-					`).run(code, expiresAt.toISOString())
-
+					const code = invitationManager.generateInvitationCode()
 					ipc.server.emit(socket, 'getInvitationCode', {
 						id,
 						code
@@ -142,4 +132,4 @@ ipc.serve(
 )
 
 ipc.server.start()
-webServer(sessionManager)
+webServer(sessionManager, invitationManager)
