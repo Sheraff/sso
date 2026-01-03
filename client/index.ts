@@ -8,17 +8,44 @@ export const COOKIE_NAME: CookieName = 'sso_session'
 
 type SsoClient = {
 	getInvitationCode: () => Promise<string>
-	checkAuth: (sessionCookie: string | undefined, host: string, path: string) => Promise<AuthCheckResult>
+	checkAuth: (sessionCookie: string | undefined, host: string, path: string) => Promise<AuthCheck.Result['message']>
 	disconnect: () => void
 }
 
-export type AuthCheckResult = {
-	authenticated: true,
-	user_id: string,
-	cookie?: string
-} | {
-	authenticated: false,
-	redirect: string
+export namespace AuthCheck {
+	export type Request = {
+		id: number
+		message: {
+			sessionCookie: string | undefined
+			host: string
+			path: string
+		}
+	}
+	export type Result = {
+		id: number
+		message: {
+			authenticated: true,
+			user_id: string,
+			cookie?: string
+		} | {
+			authenticated: false,
+			redirect: string
+		}
+	}
+}
+
+export namespace InvitationCode {
+	export type Request = {
+		id: number
+	}
+	export type Result = {
+		id: number
+		message: {
+			code: string
+		} | {
+			error: string
+		}
+	}
 }
 
 
@@ -70,12 +97,16 @@ export function createSsoClient(name: string): SsoClient {
 
 	function connect() {
 		connected = false
+		const interval = setInterval(() => {
+			console.warn('[SSO CLIENT] Attempting to connect to SSO server...')
+		}).unref()
 		ipc.connectTo(
 			SERVER_ID,
 			() => {
 				ipc.of[SERVER_ID].on('disconnect', connect)
 				ipc.of[SERVER_ID].on('connect', () => {
 					connected = true
+					clearInterval(interval)
 				})
 			}
 		)
@@ -135,27 +166,20 @@ export function createSsoClient(name: string): SsoClient {
 	 */
 	const checkAuth: SsoClient['checkAuth'] = (sessionCookie, host, path) => {
 		const id = messageId++
-		return new Promise<AuthCheckResult>((resolve, reject) => {
+		return new Promise<AuthCheck.Result['message']>((resolve, reject) => {
 			if (!connected) {
-				// Not connected, return default redirect
-				resolve({
-					authenticated: false,
-					redirect: `http://localhost:3000?host=${encodeURIComponent(host)}&path=${encodeURIComponent(path)}`
-				})
+				reject(new Error('Not connected to SSO server'))
 				return
 			}
 
-			// Set up timeout (10 seconds)
+			// Set up timeout (1 second)
 			const timeout = setTimeout(() => {
 				cleanup()
-				resolve({
-					authenticated: false,
-					redirect: `http://localhost:3000?host=${encodeURIComponent(host)}&path=${encodeURIComponent(path)}`
-				})
-			}, 10000)
+				reject(new Error('Timed out waiting for authentication response'))
+			}, 1000).unref()
 
 			// Set up one-time response handler
-			const responseHandler = (data: { id: number, message: AuthCheckResult }) => {
+			const responseHandler = (data: AuthCheck.Result) => {
 				if (data.id !== id) return
 				cleanup()
 				resolve(data.message)
@@ -172,10 +196,12 @@ export function createSsoClient(name: string): SsoClient {
 			// Send request
 			ipc.of[SERVER_ID].emit('checkAuth', {
 				id,
-				sessionCookie,
-				host,
-				path
-			})
+				message: {
+					sessionCookie,
+					host,
+					path
+				}
+			} satisfies AuthCheck.Request)
 		})
 	}
 
@@ -216,17 +242,17 @@ export function createSsoClient(name: string): SsoClient {
 			// Set up timeout (5 seconds)
 			const timeout = setTimeout(() => {
 				cleanup()
-				reject(new Error('Timeout waiting for invitation code'))
-			}, 5000)
+				reject(new Error('Timed out waiting for invitation code'))
+			}, 5000).unref()
 
 			// Set up one-time response handler
-			const responseHandler = (data: { id: number, code?: string, error?: string }) => {
+			const responseHandler = (data: InvitationCode.Result) => {
 				if (data.id !== id) return
 				cleanup()
-				if (data.error) {
-					reject(new Error(data.error))
-				} else if (data.code) {
-					resolve(data.code)
+				if ('error' in data.message) {
+					reject(new Error(data.message.error))
+				} else if ('code' in data.message) {
+					resolve(data.message.code)
 				} else {
 					reject(new Error('Invalid response from server'))
 				}
@@ -241,7 +267,7 @@ export function createSsoClient(name: string): SsoClient {
 			ipc.of[SERVER_ID].on('getInvitationCode', responseHandler)
 
 			// Send request
-			ipc.of[SERVER_ID].emit('getInvitationCode', { id })
+			ipc.of[SERVER_ID].emit('getInvitationCode', { id } satisfies InvitationCode.Request)
 		})
 	}
 
