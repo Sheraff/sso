@@ -89,33 +89,44 @@ export namespace InvitationCode {
  * process.on('exit', () => sso.disconnect())
  * ```
  */
-export function createSsoClient(name: string): SsoClient {
+export function createSsoClient(
+	name: string,
+	options?: {
+		logger?: (msg: string) => void,
+		slient?: boolean,
+	}
+): SsoClient {
+	const logger = options?.logger ?? console.log.bind(console)
+	const silent = options?.slient ?? false
 	const ipc = new NodeIPC.IPC()
 	const id = `${name}-${Math.random().toString(16).slice(2)}`
 	ipc.config.id = id
 	ipc.config.retry = 1000
-	ipc.config.silent = false
+	ipc.config.silent = silent
+	ipc.config.logger = logger
 
 	let state: ConnectionState = 'connecting'
 
 	ipc.connectTo(SERVER_ID, `/tmp/sso-${SERVER_ID}.sock`, () => {
-		ipc.of[SERVER_ID].on('error', (err) => {
-			console.error('[SSO CLIENT] Connection error:', err.message || err)
-		})
+		if (!silent) {
+			ipc.of[SERVER_ID].on('error', (err) => {
+				logger(`[SSO CLIENT] Connection error: ${err.message || err}`)
+			})
+		}
 
 		ipc.of[SERVER_ID].on('connect', () => {
 			state = 'connected'
-			console.log('[SSO CLIENT] Connected to SSO server')
+			if (!silent) logger('[SSO CLIENT] Connected to SSO server')
 		})
 
 		ipc.of[SERVER_ID].on('disconnect', () => {
 			state = 'connecting'
-			console.warn('[SSO CLIENT] Disconnected from SSO server, auto-reconnecting...')
+			if (!silent) logger('[SSO CLIENT] Disconnected from SSO server, auto-reconnecting...')
 		})
 
 		ipc.of[SERVER_ID].on('destroy', () => {
 			state = 'destroyed'
-			console.error('[SSO CLIENT] Connection destroyed')
+			if (!silent) logger('[SSO CLIENT] Connection destroyed')
 		})
 	})
 
