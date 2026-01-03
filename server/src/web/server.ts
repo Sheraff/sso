@@ -4,7 +4,7 @@ import session from '@fastify/session'
 import grant from "grant"
 import { readFileSync } from 'node:fs'
 import { grantOptions, getGrantData, type RawGrant } from "../providers/index.ts"
-import { domain, ORIGIN, validateRedirectHost } from "../domain.ts"
+import { domain, hostname, ORIGIN, validateRedirectHost } from "../domain.ts"
 import type { CookieName } from "@sso/client"
 import { type SessionManager } from "../sessions/sessions.ts"
 import type { InvitationManager } from "../invitations/invitations.ts"
@@ -82,13 +82,18 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		 */
 
 		const providers = Object.entries(grantOptions).filter((p) => p[1])
+		const lastProvider = request.cookies.last_provider
 
 		let html = readFileSync(new URL('./signin.html', import.meta.url), 'utf-8')
 
 		// Inject provider buttons
-		const providerButtons = providers.map(([name]) =>
-			`<button type="submit" formaction="/submit/${name}" class="provider-btn">${name.charAt(0).toUpperCase() + name.slice(1)}</button>`
-		).join('\n\t\t\t\t')
+		const providerButtons = providers.map(([name]) => {
+			const isLastUsed = name === lastProvider
+			const displayName = name.charAt(0).toUpperCase() + name.slice(1)
+			const label = isLastUsed ? `${displayName} (Last used)` : displayName
+			const className = isLastUsed ? 'provider-btn last-used' : 'provider-btn'
+			return `<button type="submit" formaction="/submit/${name}" class="${className}">${label}</button>`
+		}).join('\n\t\t\t\t')
 
 		html = html.replace('<!-- PROVIDER_BUTTONS -->', providerButtons)
 
@@ -253,6 +258,16 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		})
 		reply.clearCookie('redirect_path', {
 			domain: domain === 'localhost' ? undefined : `.${domain}`,
+			path: '/'
+		})
+
+		// Remember which provider was last used
+		reply.setCookie('last_provider', grantData.provider, {
+			httpOnly: false, // Allow client-side access for UI updates
+			secure: domain !== 'localhost',
+			domain: hostname,
+			sameSite: 'lax',
+			maxAge: 365 * 24 * 60 * 60, // 1 year in seconds
 			path: '/'
 		})
 

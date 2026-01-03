@@ -1,7 +1,7 @@
 const ORIGIN = process.env.ORIGIN!
 if (!ORIGIN) throw new Error("ORIGIN not set in environment")
 
-const hostname = new URL(ORIGIN).hostname
+export const hostname = new URL(ORIGIN).hostname
 
 export const domain = hostname === "localhost" ? hostname : hostname.split(".").slice(-2).join(".")
 
