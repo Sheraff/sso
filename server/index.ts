@@ -112,21 +112,6 @@ ipc.serve(
 				const { id } = data
 
 				try {
-					// Check if we already have a valid code
-					const existingCode = db.prepare(`
-						SELECT code FROM invites
-						WHERE expires_at > datetime('now')
-						LIMIT 1
-					`).get() as { code: string } | undefined
-
-					if (existingCode) {
-						ipc.server.emit(socket, 'getInvitationCode', {
-							id,
-							code: existingCode.code
-						})
-						return
-					}
-
 					// Generate new code
 					const existingCodes = db.prepare(`
 						SELECT code FROM invites
