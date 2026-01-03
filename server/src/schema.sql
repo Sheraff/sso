@@ -14,11 +14,9 @@ CREATE TABLE
 CREATE TABLE
 	IF NOT EXISTS sessions (
 		id TEXT NOT NULL PRIMARY KEY,
+		user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
 		session JSON NOT NULL,
 		expires_at DATETIME NOT NULL,
-		provider TEXT,
-		provider_user_id TEXT,
-		provider_email TEXT,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
 
@@ -32,3 +30,7 @@ CREATE TABLE
 CREATE INDEX IF NOT EXISTS accounts_session_lookup ON accounts (provider, provider_user_id);
 
 CREATE INDEX IF NOT EXISTS accounts_user_id ON accounts (user_id);
+
+CREATE INDEX IF NOT EXISTS sessions_expires_at ON sessions (expires_at);
+
+CREATE INDEX IF NOT EXISTS sessions_user_id ON sessions (user_id);

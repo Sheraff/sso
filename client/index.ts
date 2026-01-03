@@ -3,17 +3,18 @@ import NodeIPC from 'node-ipc'
 export type ServerID = 'world'
 const SERVER_ID: ServerID = 'world'
 
+export type CookieName = 'sso_session'
+export const COOKIE_NAME: CookieName = 'sso_session'
+
 type SsoClient = {
 	getInvitationCode: () => Promise<string>
-	checkAuth: (sessionCookie: string | undefined) => Promise<AuthCheckResult>
+	checkAuth: (sessionCookie: string | undefined, host: string, path: string) => Promise<AuthCheckResult>
+	disconnect: () => void
 }
 
 export type AuthCheckResult = {
 	authenticated: true,
-	user: {
-		id: string
-		email: string
-	}
+	user_id: string,
 	cookie?: string
 } | {
 	authenticated: false,
@@ -24,14 +25,42 @@ export type AuthCheckResult = {
 /**
  * Creates an SSO client that connects to the SSO server via IPC.
  * 
- * This is used by other Node.js on the same machine to ensure the
- * user is logged in.
+ * This client is used by other Node.js applications on the same machine 
+ * to authenticate users via the centralized SSO server.
  * 
- * Send in the session cookie attached to a request to authenticate.
+ * The client establishes a persistent IPC connection that automatically 
+ * reconnects if disconnected. Call `disconnect()` to explicitly close 
+ * the connection when the client is no longer needed.
  * 
- * @param name The name of the client application.
+ * @param name - The name of the client application (used for IPC identification)
+ * @returns An SSO client with authentication methods
+ * 
+ * @example
+ * ```typescript
+ * const sso = createSsoClient('my-app')
+ * 
+ * // Check authentication
+ * const result = await sso.checkAuth(
+ *   req.cookies[COOKIE_NAME],
+ *   req.hostname,
+ *   req.path
+ * )
+ * 
+ * if (result.authenticated) {
+ *   console.log('User:', result.user.email)
+ *   // Update cookie if refreshed
+ *   if (result.cookie) {
+ *     res.cookie(COOKIE_NAME, result.cookie, { httpOnly: true, secure: true })
+ *   }
+ * } else {
+ *   res.redirect(result.redirect)
+ * }
+ * 
+ * // Cleanup when done
+ * process.on('exit', () => sso.disconnect())
+ * ```
  */
-function createSsoClient(name: string): SsoClient {
+export function createSsoClient(name: string): SsoClient {
 	const ipc = new NodeIPC.IPC()
 	const id = `${name}-${Math.random().toString(16).slice(2)}`
 	ipc.config.id = id
@@ -51,46 +80,138 @@ function createSsoClient(name: string): SsoClient {
 			}
 		)
 	}
-
 	connect()
 
+	let messageId = 0
+
+	/**
+	 * Checks the authentication status of a session cookie.
+	 * 
+	 * This method validates the provided session cookie against the SSO server.
+	 * Sessions are automatically refreshed on every call, extending their 
+	 * validity by 50 days from the time of this check (sliding window expiration).
+	 * 
+	 * A new encrypted cookie is returned on every successful authentication,
+	 * even if the underlying session ID hasn't changed. This is because each
+	 * encryption uses random salt and IV, producing unique ciphertext.
+	 * 
+	 * Concurrent calls to checkAuth with the same session are safe: all will
+	 * receive valid responses with different encrypted cookies representing
+	 * the same session.
+	 * 
+	 * @param sessionCookie - The encrypted session cookie value (or undefined if not present)
+	 * @param host - The hostname of the current request (e.g., "app.example.com")
+	 * @param path - The path of the current request (e.g., "/dashboard")
+	 * @returns Authentication result with user data and refreshed cookie, or redirect URL
+	 * 
+	 * @example
+	 * ```typescript
+	 * const result = await sso.checkAuth(
+	 *   req.cookies[COOKIE_NAME],
+	 *   req.hostname,
+	 *   req.path
+	 * )
+	 * 
+	 * if (result.authenticated) {
+	 *   // User is authenticated
+	 *   req.user = result.user
+	 *   
+	 *   // Always update the cookie to extend session
+	 *   if (result.cookie) {
+	 *     res.cookie(COOKIE_NAME, result.cookie, {
+	 *       httpOnly: true,
+	 *       secure: true,
+	 *       sameSite: 'lax',
+	 *       maxAge: 50 * 24 * 60 * 60 * 1000 // 50 days
+	 *     })
+	 *   }
+	 *   
+	 *   next()
+	 * } else {
+	 *   // User needs to authenticate
+	 *   res.redirect(result.redirect)
+	 * }
+	 * ```
+	 */
+	const checkAuth: SsoClient['checkAuth'] = (sessionCookie, host, path) => {
+		const id = messageId++
+		return new Promise<AuthCheckResult>((resolve, reject) => {
+			if (!connected) {
+				// Not connected, return default redirect
+				resolve({
+					authenticated: false,
+					redirect: `http://localhost:3000?host=${encodeURIComponent(host)}&path=${encodeURIComponent(path)}`
+				})
+				return
+			}
+
+			// Set up timeout (10 seconds)
+			const timeout = setTimeout(() => {
+				cleanup()
+				resolve({
+					authenticated: false,
+					redirect: `http://localhost:3000?host=${encodeURIComponent(host)}&path=${encodeURIComponent(path)}`
+				})
+			}, 10000)
+
+			// Set up one-time response handler
+			const responseHandler = (data: { id: number, message: AuthCheckResult }) => {
+				if (data.id !== id) return
+				cleanup()
+				resolve(data.message)
+			}
+
+			const cleanup = () => {
+				clearTimeout(timeout)
+				ipc.of[SERVER_ID].off('checkAuth', responseHandler)
+			}
+
+			// Register response handler
+			ipc.of[SERVER_ID].on('checkAuth', responseHandler)
+
+			// Send request
+			ipc.of[SERVER_ID].emit('checkAuth', {
+				id,
+				sessionCookie,
+				host,
+				path
+			})
+		})
+	}
+
+
+	/**
+	 * Disconnects from the SSO server and cleans up the IPC connection.
+	 * 
+	 * Call this method when your application is shutting down or when
+	 * the SSO client is no longer needed. This ensures proper cleanup
+	 * of IPC resources.
+	 * 
+	 * @example
+	 * ```typescript
+	 * const sso = createSsoClient('my-app')
+	 * 
+	 * // Use the client...
+	 * 
+	 * // Cleanup on shutdown
+	 * process.on('SIGTERM', () => {
+	 *   sso.disconnect()
+	 *   process.exit(0)
+	 * })
+	 * ```
+	 */
+	const disconnect: SsoClient['disconnect'] = () => {
+		ipc.disconnect(SERVER_ID)
+		connected = false
+	}
+
+	const getInvitationCode: SsoClient['getInvitationCode'] = () => {
+		throw new Error('Not implemented')
+	}
+
 	return {
-		getInvitationCode: () => { },
-		checkAuth: (sessionCookie) => { },
+		getInvitationCode,
+		checkAuth,
+		disconnect
 	}
 }
-
-const ipc = new NodeIPC.IPC()
-ipc.config.id = 'hello'
-ipc.config.retry = 1000
-
-ipc.connectTo(
-	'world',
-	() => {
-		ipc.of.world.on(
-			'connect',
-			() => {
-				ipc.log('## connected to world ##')
-				ipc.of.world.emit(
-					'app.message',
-					{
-						id: ipc.config.id,
-						message: 'hello'
-					}
-				)
-			}
-		)
-		ipc.of.world.on(
-			'disconnect',
-			() => {
-				ipc.log('disconnected from world')
-			}
-		)
-		ipc.of.world.on(
-			'app.message',
-			(data) => {
-				ipc.log('got a message from world : ', data)
-			}
-		)
-	}
-)

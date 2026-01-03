@@ -257,14 +257,14 @@ Validates a session cookie and returns authentication status.
 
 ```typescript
 import express from 'express'
-import { createSsoClient } from '@sso/client'
+import { createSsoClient, COOKIE_NAME } from '@sso/client'
 
 const app = express()
 const sso = createSsoClient('express-app')
 
 // Authentication middleware
 async function requireAuth(req, res, next) {
-  const sessionCookie = req.cookies['sso_session']
+  const sessionCookie = req.cookies[COOKIE_NAME]
   
   try {
     const result = await sso.checkAuth(sessionCookie)
@@ -272,7 +272,7 @@ async function requireAuth(req, res, next) {
     if (result.authenticated) {
       // Update cookie if refreshed
       if (result.cookie) {
-        res.cookie('sso_session', result.cookie, {
+        res.cookie(COOKIE_NAME, result.cookie, {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
           domain: '.example.com', // Share across subdomains
@@ -311,7 +311,7 @@ app.listen(3001)
 ```typescript
 import Fastify from 'fastify'
 import cookie from '@fastify/cookie'
-import { createSsoClient } from '@sso/client'
+import { createSsoClient, COOKIE_NAME } from '@sso/client'
 
 const fastify = Fastify()
 const sso = createSsoClient('fastify-app')
@@ -321,7 +321,7 @@ await fastify.register(cookie)
 
 // Authentication decorator
 fastify.decorate('authenticate', async (request, reply) => {
-  const sessionCookie = request.cookies['sso_session']
+  const sessionCookie = request.cookies[COOKIE_NAME]
   
   try {
     const result = await sso.checkAuth(sessionCookie)
@@ -329,7 +329,7 @@ fastify.decorate('authenticate', async (request, reply) => {
     if (result.authenticated) {
       // Update cookie if refreshed
       if (result.cookie) {
-        reply.setCookie('sso_session', result.cookie, {
+        reply.setCookie(COOKIE_NAME, result.cookie, {
           httpOnly: true,
           secure: true,
           domain: '.example.com',
@@ -364,12 +364,12 @@ await fastify.listen({ port: 3002 })
 // middleware.ts
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { createSsoClient } from '@sso/client'
+import { createSsoClient, COOKIE_NAME } from '@sso/client'
 
 const sso = createSsoClient('nextjs-app')
 
 export async function middleware(request: NextRequest) {
-  const sessionCookie = request.cookies.get('sso_session')?.value
+  const sessionCookie = request.cookies.get(COOKIE_NAME)?.value
   
   try {
     const result = await sso.checkAuth(sessionCookie)
@@ -379,7 +379,7 @@ export async function middleware(request: NextRequest) {
       
       // Update cookie if refreshed
       if (result.cookie) {
-        response.cookies.set('sso_session', result.cookie, {
+        response.cookies.set(COOKIE_NAME, result.cookie, {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
           domain: '.example.com',
@@ -411,7 +411,7 @@ export const config = {
 
 ```typescript
 import { ApolloServer } from '@apollo/server'
-import { createSsoClient } from '@sso/client'
+import { createSsoClient, COOKIE_NAME } from '@sso/client'
 
 const sso = createSsoClient('graphql-api')
 
@@ -419,7 +419,7 @@ const server = new ApolloServer({
   typeDefs,
   resolvers,
   context: async ({ req }) => {
-    const sessionCookie = req.cookies['sso_session']
+    const sessionCookie = req.cookies[COOKIE_NAME]
     const result = await sso.checkAuth(sessionCookie)
     
     if (!result.authenticated) {
@@ -527,7 +527,7 @@ To customize this behavior in your application:
 
 ```typescript
 async function requireAuth(req, res, next) {
-  const result = await sso.checkAuth(req.cookies['sso_session'])
+  const result = await sso.checkAuth(req.cookies[COOKIE_NAME])
   
   if (!result.authenticated) {
     // The redirect URL already includes return path
