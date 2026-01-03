@@ -1,16 +1,14 @@
 import { readFileSync } from 'node:fs'
 import ipc from 'node-ipc'
 import Database from "better-sqlite3"
-import type { ServerID, AuthCheckResult } from "@sso/client"
+import type { ServerID, AuthCheckResult, CookieName } from "@sso/client"
 import { webServer } from "./src/web/server.ts"
 import { createSessionManager } from "./src/sessions.ts"
 import { decrypt } from "./src/encryption.ts"
 import { domain, ORIGIN, validateRedirectHost } from "./src/domain.ts"
 
 const SERVER_ID: ServerID = 'world'
-
-const COOKIE_NAME = process.env.COOKIE_NAME!
-if (!COOKIE_NAME) throw new Error("COOKIE_NAME not set in environment")
+const COOKIE_NAME: CookieName = 'sso_session'
 
 ipc.config.id = SERVER_ID
 ipc.config.retry = 1500
