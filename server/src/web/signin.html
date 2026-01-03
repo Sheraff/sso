@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>SSO - Sign In</title>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+			background-color: #f5f5f5;
+			min-height: 100vh;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			padding: 20px;
+		}
+
+		.container {
+			background: white;
+			border: 1px solid #ddd;
+			padding: 40px;
+			max-width: 400px;
+			width: 100%;
+		}
+
+		h1 {
+			font-size: 24px;
+			font-weight: 600;
+			color: #333;
+			margin-bottom: 32px;
+		}
+
+		.section {
+			margin-bottom: 32px;
+		}
+
+		.section:last-child {
+			margin-bottom: 0;
+		}
+
+		.section-title {
+			font-size: 14px;
+			font-weight: 600;
+			color: #666;
+			margin-bottom: 12px;
+		}
+
+		input[type="text"] {
+			width: 100%;
+			padding: 10px 12px;
+			border: 1px solid #ccc;
+			font-size: 14px;
+			font-family: inherit;
+		}
+
+		input[type="text"]:focus {
+			outline: none;
+			border-color: #999;
+		}
+
+		.provider-buttons {
+			display: flex;
+			flex-direction: column;
+			gap: 10px;
+		}
+
+		.provider-btn {
+			display: block;
+			padding: 10px 16px;
+			border: 1px solid #ccc;
+			background: white;
+			color: #333;
+			font-size: 14px;
+			font-weight: 500;
+			cursor: pointer;
+			text-decoration: none;
+			text-align: center;
+			font-family: inherit;
+		}
+
+		.provider-btn:hover {
+			background: #fafafa;
+			border-color: #999;
+		}
+
+		hr {
+			border: none;
+			border-top: 1px solid #eee;
+			margin: 24px 0;
+		}
+	</style>
+</head>
+
+<body>
+	<div class="container">
+		<h1>Sign In</h1>
+
+		<div class="section">
+			<div class="section-title">Sign Up (Invitation Code)</div>
+			<input type="text" id="inviteCode" placeholder="Enter invitation code" autocomplete="off" />
+		</div>
+
+		<hr>
+
+		<div class="section">
+			<div class="section-title">Continue With</div>
+			<div class="provider-buttons" id="providers">
+				<!-- PROVIDER_BUTTONS -->
+			</div>
+		</div>
+	</div>
+
+	<script>
+		document.querySelectorAll('.provider-btn').forEach(btn => {
+			btn.addEventListener('click', (e) => {
+				e.preventDefault()
+				const provider = btn.dataset.provider
+				const inviteCode = document.getElementById('inviteCode').value.trim()
+
+				if (inviteCode) {
+					document.cookie = 'invite_code=' + encodeURIComponent(inviteCode) + '; path=/; max-age=600; samesite=lax'
+				}
+
+				window.location.href = '/connect/' + provider
+			})
+		})
+	</script>
+</body>
+
+</html>

@@ -2,6 +2,7 @@ import Fastify from 'fastify'
 import cookie from '@fastify/cookie'
 import session from '@fastify/session'
 import grant from "grant"
+import { readFileSync } from 'node:fs'
 import { grantOptions, getGrantData, type RawGrant } from "#/providers/index.ts"
 import { domain, ORIGIN, validateRedirectHost } from "#/domain.ts"
 import type { CookieName } from "@sso/client"
@@ -79,7 +80,19 @@ export function webServer(sessionManager: SessionManager) {
 		 * 
 		 * Links to /connect/{provider} (no query params needed)
 		 */
-		reply.send({ hello: 'world' })
+
+		const providers = Object.entries(grantOptions).filter((p) => p[1])
+
+		let html = readFileSync(new URL('./signin.html', import.meta.url), 'utf-8')
+
+		// Inject provider buttons
+		const providerButtons = providers.map(([name]) =>
+			`<a href="#" class="provider-btn" data-provider="${name}">${name.charAt(0).toUpperCase() + name.slice(1)}</a>`
+		).join('\n\t\t\t\t')
+
+		html = html.replace('<!-- PROVIDER_BUTTONS -->', providerButtons)
+
+		reply.type('text/html').send(html)
 	})
 
 	// Register Grant middleware
