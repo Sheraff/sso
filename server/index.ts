@@ -12,8 +12,6 @@ const SERVER_ID: ServerID = 'world'
 const COOKIE_NAME = process.env.COOKIE_NAME!
 if (!COOKIE_NAME) throw new Error("COOKIE_NAME not set in environment")
 
-if (!process.env.ORIGIN) throw new Error("ORIGIN not set in environment")
-
 ipc.config.id = SERVER_ID
 ipc.config.retry = 1500
 
