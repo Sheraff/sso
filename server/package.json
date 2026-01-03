@@ -5,8 +5,8 @@
 	"description": "",
 	"main": "index.ts",
 	"scripts": {
-		"start": "node index.ts",
-		"invite": "node invite.ts",
+		"start": "node --env-file=.env index.ts",
+		"invite": "node --env-file=.env invite.ts",
 		"test": "echo \"Error: no test specified\" && exit 1"
 	},
 	"keywords": [],
