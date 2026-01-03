@@ -128,7 +128,10 @@ ipc.serve(
 					}
 
 					// Generate new code
-					const code = generateCode()
+					const existingCodes = db.prepare(`
+						SELECT code FROM invites
+					`).all() as { code: string }[]
+					const code = generateCode(existingCodes.map(c => c.code))
 					const expiresAt = new Date()
 					expiresAt.setDate(expiresAt.getDate() + 30) // 30 days from now
 

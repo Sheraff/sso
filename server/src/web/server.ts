@@ -5,8 +5,22 @@ import grant from "grant"
 import { grantOptions, getGrantData, type RawGrant } from "#/providers/index.ts"
 import { domain, ORIGIN, validateRedirectHost } from "#/domain.ts"
 import type { CookieName } from "@sso/client"
-import type Database from "better-sqlite3"
-import { createSessionManager, type SessionManager } from "#/sessions.ts"
+import { type SessionManager } from "#/sessions.ts"
+
+// Extend Fastify session types
+declare module '@fastify/session' {
+	interface FastifySessionObject {
+		grant?: {
+			provider?: string
+			response?: RawGrant['response']
+		}
+	}
+}
+
+interface RootQuerystring {
+	host?: string
+	path?: string
+}
 
 const PORT = process.env.PORT!
 if (!PORT) throw new Error("PORT not set in environment")
@@ -30,10 +44,10 @@ export function webServer(sessionManager: SessionManager) {
 	})
 
 	// Root page - sets redirect cookies
-	fastify.get('/', function (request, reply) {
+	fastify.get<{ Querystring: RootQuerystring }>('/', function (request, reply) {
 		// Get redirect parameters from query
-		const host = request.query?.host as string | undefined
-		const path = request.query?.path as string | undefined
+		const host = request.query.host
+		const path = request.query.path
 
 		// Set temporary cookies to preserve redirect destination through OAuth flow
 		if (host) {
@@ -104,7 +118,7 @@ export function webServer(sessionManager: SessionManager) {
 		// Extract user data from OAuth response
 		const grantData = getGrantData({ provider, state: '', response })
 		if (!grantData) {
-			fastify.log.error('Failed to extract grant data', { provider })
+			fastify.log.error({ provider }, 'Failed to extract grant data')
 			return reply.status(400).send({ error: 'Invalid OAuth response' })
 		}
 
@@ -120,11 +134,11 @@ export function webServer(sessionManager: SessionManager) {
 
 		if (!sessionId) {
 			// User not found - redirect to sign-up flow
-			fastify.log.warn('OAuth sign-in for non-existent user', {
+			fastify.log.warn({
 				provider: grantData.provider,
 				providerId: grantData.id,
 				email: grantData.email
-			})
+			}, 'OAuth sign-in for non-existent user')
 
 			// Clear any existing session cookie
 			reply.clearCookie(COOKIE_NAME, {
@@ -167,10 +181,10 @@ export function webServer(sessionManager: SessionManager) {
 		const protocol = domain === 'localhost' ? 'http' : 'https'
 		const redirectUrl = `${protocol}://${validHost}${redirectPath || '/'}`
 
-		fastify.log.info('OAuth sign-in successful', {
+		fastify.log.info({
 			provider: grantData.provider,
 			redirectUrl
-		})
+		}, 'OAuth sign-in successful')
 
 		// Redirect back to application
 		return reply.redirect(redirectUrl)
