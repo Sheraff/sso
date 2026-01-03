@@ -29,7 +29,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 	// Register cookie and session plugins (required by Grant)
 	void fastify.register(cookie)
 	void fastify.register(session, {
-		secret: process.env.SECRET!,
+		secret: process.env.ENCRYPTION_KEY!,
 		cookie: {
 			secure: domain !== 'localhost',
 			httpOnly: true,

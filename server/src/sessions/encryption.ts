@@ -8,7 +8,7 @@
 import crypto, { type CipherGCMTypes } from "node:crypto"
 
 const ALGORITHM: CipherGCMTypes = "aes-256-gcm"
-const PASSWORD = process.env.SECRET!
+const PASSWORD = process.env.ENCRYPTION_KEY!
 
 if (!PASSWORD) throw new Error("Encryption password not set in environment")
 
