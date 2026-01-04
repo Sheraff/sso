@@ -1,8 +1,8 @@
 export type LRUCache<TKey, TValue> = {
-	get: (key: TKey) => TValue | undefined
-	set: (key: TKey, value: TValue) => void
-	destroy: (key: TKey) => void
-	clear: () => void
+	get: (key: TKey, cb: (value: TValue | undefined) => void) => void
+	set: (key: TKey, value: TValue, cb: () => void) => void
+	destroy: (key: TKey, cb: () => void) => void
+	clear: (cb: () => void) => void
 }
 
 export function createLRUCache<TKey, TValue>(
@@ -36,13 +36,13 @@ export function createLRUCache<TKey, TValue>(
 	}
 
 	return {
-		get(key) {
+		get(key, cb) {
 			const entry = cache.get(key)
-			if (!entry) return undefined
+			if (!entry) return cb(undefined)
 			touch(entry)
-			return entry.value
+			cb(entry.value)
 		},
-		set(key, value) {
+		set(key, value, cb) {
 			if (cache.size >= max && oldest) {
 				const toDelete = oldest
 				cache.delete(toDelete.key)
@@ -65,10 +65,11 @@ export function createLRUCache<TKey, TValue>(
 				if (!oldest) oldest = entry
 				cache.set(key, entry)
 			}
+			cb()
 		},
-		destroy(key) {
+		destroy(key, cb) {
 			const entry = cache.get(key)
-			if (!entry) return
+			if (!entry) return cb()
 			if (entry.prev) {
 				entry.prev.next = entry.next
 			} else {
@@ -80,11 +81,13 @@ export function createLRUCache<TKey, TValue>(
 				newest = entry.prev
 			}
 			cache.delete(key)
+			cb()
 		},
-		clear() {
+		clear(cb) {
 			cache.clear()
 			oldest = undefined
 			newest = undefined
+			cb()
 		},
 	}
 }
