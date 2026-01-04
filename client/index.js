@@ -11,6 +11,7 @@ export function createSsoClient(
 ) {
 	const logger = options?.logger ?? console.log.bind(console)
 	const silent = options?.slient ?? false
+	const callback = options?.callback
 	const ipc = new NodeIPC.IPC()
 	const id = `${name}-${Math.random().toString(16).slice(2)}`
 	ipc.config.id = id
@@ -31,6 +32,7 @@ export function createSsoClient(
 		ipc.of[SERVER_ID].on('connect', () => {
 			state = 'connected'
 			if (!silent) logger('[SSO CLIENT] Connected to SSO server')
+			if (callback) callback(client)
 		})
 
 		ipc.of[SERVER_ID].on('disconnect', () => {
@@ -143,9 +145,11 @@ export function createSsoClient(
 		})
 	}
 
-	return {
+	const client = {
 		getInvitationCode,
 		checkAuth,
 		disconnect
 	}
+
+	return client
 }

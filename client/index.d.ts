@@ -156,5 +156,6 @@ export function createSsoClient(
 	options?: {
 		logger?: (msg: string) => void,
 		slient?: boolean,
+		callback?: (client: SsoClient) => void
 	}
 ): SsoClient
