@@ -157,14 +157,13 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 
 	// Log all requests to /connect/* for debugging
 	fastify.addHook('onRequest', async (request, reply) => {
-		if (request.url.startsWith('/connect')) {
-			fastify.log.info({
-				url: request.url,
-				sessionId: request.session?.sessionId,
-				cookies: Object.keys(request.cookies),
-				cookieHeader: request.headers.cookie
-			}, 'OAuth flow request')
-		}
+		fastify.log.info({
+			url: request.url,
+			raw: request.raw.url,
+			sessionId: request.session?.sessionId,
+			cookies: Object.keys(request.cookies),
+			cookieHeader: request.headers.cookie
+		}, '---------------------- OAuth flow request')
 	})
 
 	// Register Grant middleware
@@ -172,7 +171,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		grant.default.fastify({
 			defaults: {
 				origin: ORIGIN,
-				transport: "state",
+				transport: "querystring",
 				state: true,
 				prefix: "/connect",
 				callback: "/auth/callback", // Our custom callback route
