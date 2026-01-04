@@ -172,7 +172,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		grant.default.fastify({
 			defaults: {
 				origin: ORIGIN,
-				transport: "session", // Response data goes to session
+				transport: "state",
 				state: true,
 				prefix: "/connect",
 				callback: "/auth/callback", // Our custom callback route
