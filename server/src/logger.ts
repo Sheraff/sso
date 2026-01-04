@@ -2,7 +2,7 @@ import pino from 'pino'
 
 // Create a shared logger instance for the entire server package
 export const logger = pino({
-	level: process.env.LOG_LEVEL || 'info',
+	level: 'info',
 	transport: process.env.NODE_ENV === 'development' ? {
 		target: 'pino-pretty',
 		options: {
