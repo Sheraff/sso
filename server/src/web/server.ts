@@ -64,7 +64,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			path: '/',
 			maxAge: 600000 // 10 minutes - only for OAuth flow
 		},
-		saveUninitialized: false, // Don't save empty sessions
+		saveUninitialized: true, // Save session even if empty - Grant needs this
 		rolling: false,
 		logLevel: "trace",
 		store: createLRUCache(20),
@@ -97,7 +97,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 
 	// Register Grant middleware
 	void fastify.register(
-		grant.default.fastify({
+		grant.default.fastify({ 
 			defaults: {
 				origin: ORIGIN,
 				transport: "session",
