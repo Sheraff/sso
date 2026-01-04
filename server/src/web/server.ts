@@ -40,39 +40,6 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 
 	// Root page - sets redirect cookies
 	fastify.get<{ Querystring: { host?: string, path?: string } }>('/', function (request, reply) {
-		// Get redirect parameters from query
-		let host = request.query.host
-		if (!host && request.headers.referer) {
-			try {
-				host = new URL(request.headers.referer).hostname
-			} catch { }
-		}
-
-
-		// Set temporary cookies to preserve redirect destination through OAuth flow
-		if (host) {
-			reply.setCookie('redirect_host', host, {
-				httpOnly: true,
-				secure: domain !== 'localhost',
-				domain: domain === 'localhost' ? undefined : `.${domain}`,
-				sameSite: 'lax',
-				maxAge: 600, // 10 minutes - just long enough for OAuth flow
-				path: '/'
-			})
-			const path = request.query.path
-			if (path) {
-				reply.setCookie('redirect_path', path, {
-					httpOnly: true,
-					secure: domain !== 'localhost',
-					domain: domain === 'localhost' ? undefined : `.${domain}`,
-					sameSite: 'lax',
-					maxAge: 600, // 10 minutes
-					path: '/'
-				})
-			}
-		}
-
-
 		/**
 		 * Serve a web page that allows
 		 * - signing in with OAuth providers (available providers from grantOptions)
@@ -97,14 +64,29 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 				<span>${label}</span>
 			</button>`
 		}).join('\n\t\t\t\t')
-
 		html = html.replace('<!-- PROVIDER_BUTTONS -->', providerButtons)
+
+		// Get redirect parameters from query
+		let hiddenFields = ''
+		let host = request.query.host
+		if (!host && request.headers.referer) {
+			try {
+				host = new URL(request.headers.referer).hostname
+			} catch { }
+		}
+		if (host) {
+			hiddenFields += `<input type="hidden" name="host" value="${host}"/>`
+			if (request.query.path) {
+				hiddenFields += `<input type="hidden" name="path" value="${request.query.path}"/>`
+			}
+		}
+		html = html.replace('<!-- HIDDEN_FIELDS -->', hiddenFields)
 
 		reply.type('text/html').send(html)
 	})
 
 	// Submit route - validates invitation code and redirects
-	fastify.get<{ Querystring: { inviteCode?: string }, Params: { provider: string } }>('/submit/:provider', async function (request, reply) {
+	fastify.get<{ Querystring: { inviteCode?: string, host?: string, path?: string }, Params: { provider: string } }>('/submit/:provider', async function (request, reply) {
 		const { provider } = request.params
 
 		if (!(provider in grantOptions) || !grantOptions[provider as keyof typeof grantOptions]) {
@@ -113,28 +95,47 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 
 		const inviteCode = request.query.inviteCode?.trim()
 
-		// No invitation code - normal sign-in flow
-		if (!inviteCode) {
-			return reply.redirect(`/connect/${provider}`)
-		}
-
 		// Validate invitation code
-		const invited = await invitationManager.checkInvitationCode(inviteCode)
+		const invited = inviteCode && await invitationManager.checkInvitationCode(inviteCode)
 
-		if (!invited) {
+		if (inviteCode && !invited) {
 			// Invalid or expired code - redirect back to root
 			return reply.redirect('/')
 		}
 
-		// Valid code - store in cookie and redirect to OAuth
-		reply.setCookie('invite_code', inviteCode, {
-			httpOnly: true,
-			secure: domain !== 'localhost',
-			domain: domain === 'localhost' ? undefined : `.${domain}`,
-			sameSite: 'lax',
-			maxAge: 600, // 10 minutes
-			path: '/'
-		})
+		if (inviteCode) {
+			// Valid code - store in cookie and redirect to OAuth
+			reply.setCookie('invite_code', inviteCode, {
+				httpOnly: true,
+				secure: domain !== 'localhost',
+				domain: domain === 'localhost' ? undefined : `.${domain}`,
+				sameSite: 'lax',
+				maxAge: 600, // 10 minutes
+				path: '/'
+			})
+		}
+
+		// Set temporary cookies to preserve redirect destination through OAuth flow
+		if (request.query.host) {
+			reply.setCookie('redirect_host', request.query.host, {
+				httpOnly: true,
+				secure: domain !== 'localhost',
+				domain: domain === 'localhost' ? undefined : `.${domain}`,
+				sameSite: 'lax',
+				maxAge: 600, // 10 minutes - just long enough for OAuth flow
+				path: '/'
+			})
+			if (request.query.path) {
+				reply.setCookie('redirect_path', request.query.path, {
+					httpOnly: true,
+					secure: domain !== 'localhost',
+					domain: domain === 'localhost' ? undefined : `.${domain}`,
+					sameSite: 'lax',
+					maxAge: 600, // 10 minutes
+					path: '/'
+				})
+			}
+		}
 
 		return reply.redirect(`/connect/${provider}`)
 	})
@@ -280,8 +281,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		let redirectUrl
 		const protocol = domain === 'localhost' ? 'http' : 'https'
 		if (redirectHost && validateRedirectHost(redirectHost)) {
-			const host = redirectHost
-			redirectUrl = `${protocol}://${host}${redirectPath || '/'}`
+			redirectUrl = `${protocol}://${redirectHost}${redirectPath || '/'}`
 		} else {
 			redirectUrl = `${protocol}://${domain}`
 		}

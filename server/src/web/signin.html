@@ -37,14 +37,6 @@
 			margin-bottom: 32px;
 		}
 
-		.section {
-			margin-bottom: 32px;
-
-			&:last-child {
-				margin-bottom: 0;
-			}
-		}
-
 		.section-title {
 			font-size: 14px;
 			font-weight: 600;
@@ -175,7 +167,8 @@
 		<h1>Sign In</h1>
 
 		<form method="get">
-			<div class="section">
+			<!-- HIDDEN_FIELDS -->
+			<div>
 				<div class="section-title">Sign Up (Invitation Code)</div>
 				<input type="text" name="inviteCode" id="inviteCode" placeholder="Enter invitation code"
 					autocomplete="off" />
@@ -183,7 +176,7 @@
 
 			<hr>
 
-			<div class="section">
+			<div>
 				<div class="section-title">Continue With</div>
 				<div class="provider-buttons" id="providers">
 					<!-- PROVIDER_BUTTONS -->
