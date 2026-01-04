@@ -256,7 +256,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		// Extract user data from OAuth response
 		const grantData = getGrantData(grantSession)
 		if (!grantData) {
-			fastify.log.error({ provider: grantSession.provider }, 'Failed to extract grant data')
+			fastify.log.error({ provider: grantSession.provider, response: grantSession.response }, 'Failed to extract grant data')
 			return reply.status(400).send({ error: 'Invalid OAuth response' })
 		}
 
