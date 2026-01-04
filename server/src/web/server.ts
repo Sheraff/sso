@@ -49,7 +49,6 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 
 	const fastify = Fastify({
 		loggerInstance: logger.child({ component: 'web-server' }),
-		trustProxy: true, // Required when behind nginx/reverse proxy for secure cookies
 	})
 
 	// Register cookie and session plugins (required by Grant)
@@ -62,11 +61,8 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			httpOnly: true,
 			sameSite: 'lax', // Critical for OAuth callbacks
 			path: '/',
-			maxAge: 86400000 // 1 day in milliseconds
+			maxAge: 600000 // 10 minutes
 		},
-		saveUninitialized: true, // Save session even if empty - Grant needs this
-		rolling: false,
-		logLevel: "trace",
 		store: createLRUCache<string, Session>(20),
 	})
 
