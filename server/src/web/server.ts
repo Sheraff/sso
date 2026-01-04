@@ -31,13 +31,15 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 	void fastify.register(cookie)
 	void fastify.register(session, {
 		secret: process.env.ENCRYPTION_KEY!,
+		cookieName: 'oauth_session',
 		cookie: {
 			secure: domain !== 'localhost',
 			httpOnly: true,
 			sameSite: 'lax', // Critical for OAuth callbacks
 			path: '/',
 			maxAge: 600000 // 10 minutes - only for OAuth flow
-		}
+		},
+		saveUninitialized: true, // Ensure session is saved even if not modified
 	})
 
 	// / - Root page - sets redirect cookies
@@ -165,18 +167,18 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		})
 	)
 
-	// // Debug handler for Grant's default callback path
-	// fastify.get('/connect/:provider/callback', async (request, reply) => {
-	// 	fastify.log.info({
-	// 		provider: (request.params as any).provider,
-	// 		query: request.query,
-	// 		sessionId: request.session.sessionId,
-	// 		hasGrant: !!request.session.grant,
-	// 		cookies: Object.keys(request.cookies)
-	// 	}, 'Grant callback received')
-	// 	// Let Grant's middleware handle this
-	// 	// This shouldn't normally be hit as Grant should handle it first
-	// })
+	// Debug handler for Grant's default callback path
+	fastify.get('/connect/:provider/callback', async (request, reply) => {
+		fastify.log.info({
+			provider: (request.params as any).provider,
+			query: request.query,
+			sessionId: request.session.sessionId,
+			hasGrant: !!request.session.grant,
+			cookies: Object.keys(request.cookies)
+		}, 'Grant callback received')
+		// Let Grant's middleware handle this
+		// This shouldn't normally be hit as Grant should handle it first
+	})
 
 	// /auth/callback - Our custom callback route - receives all OAuth responses
 	fastify.get('/auth/callback', async (request, reply) => {
