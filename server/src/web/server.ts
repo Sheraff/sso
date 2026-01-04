@@ -216,8 +216,14 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			}
 		}
 
+		if (!request.session)
+			fastify.log.error('No session found on /submit/:provider request')
+
 		// Ensure session is saved before redirecting to Grant
-		await new Promise(resolve => request.session.save(resolve))
+		if (!request.session.isSaved())
+			await new Promise(resolve => request.session.save(resolve))
+		else
+			fastify.log.trace('Session already saved before /submit/:provider redirect')
 
 		return reply.redirect(`/connect/${provider}`)
 	})
