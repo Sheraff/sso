@@ -147,7 +147,7 @@ function registerInvitationCodeHandler(invitationManager: InvitationManager) {
 	)
 }
 
-export function ipcServer(sessionManager: SessionManager, invitationManager: InvitationManager) {
+export function ipcServer(sessionManager: SessionManager, invitationManager: InvitationManager): typeof ipc {
 	ipc.config.id = SERVER_ID
 	ipc.config.retry = 1500
 	const ipcLogger = logger.child({ component: 'ipc-server' })
@@ -162,4 +162,6 @@ export function ipcServer(sessionManager: SessionManager, invitationManager: Inv
 	)
 
 	ipc.server.start()
+
+	return ipc
 }

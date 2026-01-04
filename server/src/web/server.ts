@@ -344,4 +344,6 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		}
 		// Server is now listening on ${address}
 	})
+
+	return fastify
 }

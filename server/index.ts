@@ -15,5 +15,14 @@ const db = new Database(process.env.DATABASE_PATH)
 const sessionManager = createSessionManager(db)
 const invitationManager = createInvitationManager(db)
 
-ipcServer(sessionManager, invitationManager)
-webServer(sessionManager, invitationManager)
+const ipc = ipcServer(sessionManager, invitationManager)
+const web = webServer(sessionManager, invitationManager)
+
+process.on("SIGINT", async () => {
+	console.log("\nSIGINT received, shutting down...")
+	await web.close().catch(console.error)
+	ipc.server.stop()
+	db.close()
+	console.log("Server shut down, exiting.")
+	process.exit(0)
+})
