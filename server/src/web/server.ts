@@ -64,9 +64,35 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			maxAge: 600000 // 10 minutes - only for OAuth flow
 		},
 		saveUninitialized: true, // Ensure session is saved even if not modified
-		logLevel: "info",
-		store: DEBUG_STORE
+		logLevel: "trace",
+		store: DEBUG_STORE,
 	})
+
+	// Log all requests to /connect/* for debugging
+	fastify.addHook('onRequest', async (request, reply) => {
+		if (!request.url.startsWith('/connect/')) return
+		fastify.log.info({
+			url: request.url,
+			raw: request.raw.url,
+			sessionId: request.session?.sessionId,
+			cookies: Object.keys(request.cookies),
+			cookieHeader: request.headers.cookie
+		}, '---------------------- OAuth flow request')
+	})
+
+	// Register Grant middleware
+	void fastify.register(
+		grant.default.fastify({
+			defaults: {
+				origin: ORIGIN,
+				transport: "session",
+				// state: true,
+				prefix: "/connect",
+				callback: "/auth/callback", // Our custom callback route
+			},
+			...grantOptions,
+		})
+	)
 
 	// / - Root page - sets redirect cookies
 	fastify.get<{ Querystring: { host?: string, path?: string, error?: string } }>('/', function (request, reply) {
@@ -179,39 +205,10 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		return reply.redirect(`/connect/${provider}`)
 	})
 
-	// Log all requests to /connect/* for debugging
-	fastify.addHook('onRequest', async (request, reply) => {
-		fastify.log.info({
-			url: request.url,
-			raw: request.raw.url,
-			sessionId: request.session?.sessionId,
-			reply_grant: reply.grant,
-			request_grant: request.grant,
-			cookies: Object.keys(request.cookies),
-			cookieHeader: request.headers.cookie
-		}, '---------------------- OAuth flow request')
-	})
-
-	// Register Grant middleware
-	void fastify.register(
-		grant.default.fastify({
-			defaults: {
-				origin: ORIGIN,
-				transport: "session",
-				state: true,
-				// prefix: "/connect",
-				callback: "/auth/callback", // Our custom callback route
-			},
-			...grantOptions,
-		})
-	)
-
 	// /auth/callback - Our custom callback route - receives all OAuth responses
 	fastify.get('/auth/callback', async (request, reply) => {
 		// Access Grant's session data
 		const grantSession = request.session.grant
-
-		fastify.log.info(`callback!!! session grant: ${!!request.session.grant}, request state grant: ${!!request.grant}, reply state grant: ${!!reply.grant}`)
 
 		if (!grantSession) {
 			fastify.log.error('OAuth callback missing grant session')
