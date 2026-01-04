@@ -72,10 +72,9 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 
 	// Ensure session is saved before Grant redirects
 	fastify.addHook('preHandler', async (request, reply) => {
-		if (request.url === '/') {
+		if (request.url.startsWith('/connect/') && !request.url.includes('/callback')) {
 			// Initialize session if not already done, forcing it to be created and saved
 			if (request.session) {
-				console.log('Prehandler saving session for /')
 				await new Promise<void>((resolve) => {
 					request.session.save(() => resolve())
 				})
