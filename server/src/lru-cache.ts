@@ -65,9 +65,6 @@ export function createLRUCache<TKey, TValue>(
 				if (!oldest) oldest = entry
 				cache.set(key, entry)
 			}
-			console.log(`LRU Cache Size: ${cache.size}`)
-			console.log(`new key: ${key}`)
-			console.log(value)
 			cb()
 		},
 		destroy(key, cb) {
