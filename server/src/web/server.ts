@@ -62,7 +62,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			httpOnly: true,
 			sameSite: 'lax', // Critical for OAuth callbacks
 			path: '/',
-			maxAge: 6600000 // 10 minutes - only for OAuth flow
+			maxAge: 86400000 // 1 day in milliseconds
 		},
 		saveUninitialized: true, // Save session even if empty - Grant needs this
 		rolling: false,
@@ -72,9 +72,10 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 
 	// Ensure session is saved before Grant redirects
 	fastify.addHook('preHandler', async (request, reply) => {
-		if (request.url.startsWith('/connect/') && !request.url.includes('/callback')) {
+		if (request.url === '/') {
 			// Initialize session if not already done, forcing it to be created and saved
 			if (request.session) {
+				console.log('Prehandler saving session for /')
 				await new Promise<void>((resolve) => {
 					request.session.save(() => resolve())
 				})
@@ -90,8 +91,12 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			url: request.url,
 			raw: request.raw.url,
 			sessionId: request.session?.sessionId,
+			hasGrant: !!request.session?.grant,
+			grantProvider: request.session?.grant?.provider,
+			grantResponseType: typeof request.session?.grant?.response,
 			cookies: Object.keys(request.cookies),
-			cookieHeader: request.headers.cookie
+			cookieHeader: request.headers.cookie,
+			queryParams: request.query
 		}, '---------------------- OAuth flow request')
 	})
 
