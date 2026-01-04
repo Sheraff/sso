@@ -113,6 +113,23 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		})
 	)
 
+	// Debug: Log what Grant puts in the session after callback
+	fastify.addHook('onResponse', async (request, reply) => {
+		if (request.url.includes('/connect/') && request.url.includes('/callback')) {
+			fastify.log.info({
+				url: request.url,
+				statusCode: reply.statusCode,
+				sessionId: request.session?.sessionId,
+				hasGrant: !!request.session?.grant,
+				grantKeys: request.session?.grant ? Object.keys(request.session.grant) : [],
+				grantResponseType: typeof request.session?.grant?.response,
+				grantResponseKeys: request.session?.grant?.response && typeof request.session.grant.response === 'object'
+					? Object.keys(request.session.grant.response)
+					: 'not an object',
+			}, 'After Grant callback processing')
+		}
+	})
+
 	// / - Root page - sets redirect cookies
 	fastify.get<{ Querystring: { host?: string, path?: string, error?: string } }>('/', function (request, reply) {
 		/**
