@@ -1,4 +1,4 @@
-import Fastify, { Session } from 'fastify'
+import Fastify, { type Session } from 'fastify'
 import cookie from '@fastify/cookie'
 import session from '@fastify/session'
 import grant from "grant"
