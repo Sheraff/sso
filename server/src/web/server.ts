@@ -67,7 +67,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		saveUninitialized: true, // Save session even if empty - Grant needs this
 		rolling: false,
 		logLevel: "trace",
-		store: createLRUCache(20),
+		// store: createLRUCache(20),
 	})
 
 	// // Ensure session is saved before Grant redirects
