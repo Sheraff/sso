@@ -9,6 +9,7 @@ import type { CookieName } from "@sso/client"
 import { type SessionManager } from "../sessions/sessions.ts"
 import type { InvitationManager } from "../invitations/invitations.ts"
 import { logger } from '../logger.ts'
+import { createLRUCache } from "../lru-cache.ts"
 
 // Extend Fastify session types
 declare module '@fastify/session' {
@@ -21,27 +22,27 @@ const PORT = process.env.PORT!
 if (!PORT) throw new Error("PORT not set in environment")
 
 
-function makeStore() {
-	const store = new Map<string, any>()
-	return {
-		get: (id: string, cb: (session: any) => void) => {
-			console.log(`STORE GET ${id}: `, store.get(id))
-			cb(store.get(id))
-		},
-		set: (id: string, session: any, cb: () => void) => {
-			console.log(`STORE SET ${id}: `, session)
-			store.set(id, session)
-			cb()
-		},
-		destroy: (id: string, cb: () => void) => {
-			console.log(`STORE DESTROY ${id}`)
-			store.delete(id)
-			cb()
-		}
-	}
-}
+// function makeStore() {
+// 	const store = new Map<string, any>()
+// 	return {
+// 		get: (id: string, cb: (session: any) => void) => {
+// 			console.log(`STORE GET ${id}: `, store.get(id))
+// 			cb(store.get(id))
+// 		},
+// 		set: (id: string, session: any, cb: () => void) => {
+// 			console.log(`STORE SET ${id}: `, session)
+// 			store.set(id, session)
+// 			cb()
+// 		},
+// 		destroy: (id: string, cb: () => void) => {
+// 			console.log(`STORE DESTROY ${id}`)
+// 			store.delete(id)
+// 			cb()
+// 		}
+// 	}
+// }
 
-const DEBUG_STORE = makeStore()
+// const DEBUG_STORE = makeStore()
 
 const COOKIE_NAME: CookieName = 'sso_session'
 export function webServer(sessionManager: SessionManager, invitationManager: InvitationManager) {
@@ -65,25 +66,25 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		},
 		saveUninitialized: true, // Ensure session is saved even if not modified
 		logLevel: "trace",
-		store: DEBUG_STORE,
+		store: createLRUCache(20),
 	})
 
-	// Ensure session is saved before Grant redirects
-	fastify.addHook('preHandler', async (request, reply) => {
-		if (request.url.startsWith('/connect/') && !request.url.includes('/callback')) {
-			// Initialize session if not already done, forcing it to be created and saved
-			if (request.session) {
-				await new Promise<void>((resolve) => {
-					request.session.save(() => resolve())
-				})
-			}
-		}
-	})
+	// // Ensure session is saved before Grant redirects
+	// fastify.addHook('preHandler', async (request, reply) => {
+	// 	if (request.url.startsWith('/connect/') && !request.url.includes('/callback')) {
+	// 		// Initialize session if not already done, forcing it to be created and saved
+	// 		if (request.session) {
+	// 			await new Promise<void>((resolve) => {
+	// 				request.session.save(() => resolve())
+	// 			})
+	// 		}
+	// 	}
+	// })
 
 	// Log all requests to /connect/* for debugging
 	fastify.addHook('onRequest', async (request, reply) => {
 		if (!request.url.startsWith('/connect/')) return
-		
+
 		fastify.log.info({
 			url: request.url,
 			raw: request.raw.url,
@@ -99,7 +100,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			defaults: {
 				origin: ORIGIN,
 				transport: "session",
-				// state: true,
+				state: true,
 				prefix: "/connect",
 				callback: "/auth/callback", // Our custom callback route
 			},
@@ -214,6 +215,9 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 				})
 			}
 		}
+
+		// Ensure session is saved before redirecting to Grant
+		await new Promise(resolve => request.session.save(resolve))
 
 		return reply.redirect(`/connect/${provider}`)
 	})
