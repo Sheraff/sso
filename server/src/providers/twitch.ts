@@ -19,6 +19,7 @@ export const options: GrantProvider | undefined = !client_id
 		scope: ["openid", "user:read:email"],
 		response: ["tokens", "profile"],
 		nonce: true,
+		token_endpoint_auth_method: 'client_secret_post',
 	}
 
 // type TwitchUser = {

@@ -110,8 +110,27 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 				callback: "/auth/callback", // Our custom callback route
 			},
 			...grantOptions,
-		})
+		}),
+		(err) => {
+			if (err) {
+				fastify.log.error({ err }, 'Failed to register Grant')
+				throw err
+			}
+		}
 	)
+
+	// Add error handler for Grant routes
+	fastify.setErrorHandler(async (error, request, reply) => {
+		if (request.url.startsWith('/connect/')) {
+			fastify.log.error({
+				error,
+				url: request.url,
+				sessionId: request.session?.sessionId,
+				stack: error.stack
+			}, 'Error in OAuth flow')
+		}
+		throw error
+	})
 
 	// / - Root page - sets redirect cookies
 	fastify.get<{ Querystring: { host?: string, path?: string, error?: string } }>('/', function (request, reply) {
