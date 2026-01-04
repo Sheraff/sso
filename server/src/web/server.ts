@@ -54,7 +54,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			reply.setCookie('redirect_host', host, {
 				httpOnly: true,
 				secure: domain !== 'localhost',
-				domain: domain === 'localhost' ? undefined : domain,
+				domain: domain === 'localhost' ? undefined : `.${domain}`,
 				sameSite: 'lax',
 				maxAge: 600, // 10 minutes - just long enough for OAuth flow
 				path: '/'
@@ -64,7 +64,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 				reply.setCookie('redirect_path', path, {
 					httpOnly: true,
 					secure: domain !== 'localhost',
-					domain: domain === 'localhost' ? undefined : domain,
+					domain: domain === 'localhost' ? undefined : `.${domain}`,
 					sameSite: 'lax',
 					maxAge: 600, // 10 minutes
 					path: '/'
@@ -130,7 +130,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		reply.setCookie('invite_code', inviteCode, {
 			httpOnly: true,
 			secure: domain !== 'localhost',
-			domain: domain === 'localhost' ? undefined : domain,
+			domain: domain === 'localhost' ? undefined : `.${domain}`,
 			sameSite: 'lax',
 			maxAge: 600, // 10 minutes
 			path: '/'
@@ -183,7 +183,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			// Clear invitation code cookie if present
 			if (inviteCode) {
 				reply.clearCookie('invite_code', {
-					domain: domain === 'localhost' ? undefined : domain,
+					domain: domain === 'localhost' ? undefined : `.${domain}`,
 					path: '/'
 				})
 			}
@@ -230,7 +230,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 
 			// Clear any existing session cookie
 			reply.clearCookie(COOKIE_NAME, {
-				domain: domain === 'localhost' ? undefined : domain,
+				domain: domain === 'localhost' ? undefined : `.${domain}`,
 				path: '/'
 			})
 
@@ -248,7 +248,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		reply.setCookie(COOKIE_NAME, encryptedCookie, {
 			httpOnly: true,
 			secure: domain !== 'localhost', // HTTPS only in production
-			domain: domain === 'localhost' ? undefined : domain, // Share across *.example.com
+			domain: domain === 'localhost' ? undefined : `.${domain}`, // Share across *.example.com
 			sameSite: 'lax', // CSRF protection
 			maxAge: 50 * 24 * 60 * 60, // 50 days in seconds
 			path: '/'
@@ -256,11 +256,11 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 
 		// Clear temporary redirect cookies
 		reply.clearCookie('redirect_host', {
-			domain: domain === 'localhost' ? undefined : domain,
+			domain: domain === 'localhost' ? undefined : `.${domain}`,
 			path: '/'
 		})
 		reply.clearCookie('redirect_path', {
-			domain: domain === 'localhost' ? undefined : domain,
+			domain: domain === 'localhost' ? undefined : `.${domain}`,
 			path: '/'
 		})
 
