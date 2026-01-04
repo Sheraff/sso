@@ -4,6 +4,7 @@ import { domain, ORIGIN, validateRedirectHost } from "../domain.ts"
 import type { SessionManager } from "../sessions/sessions.ts"
 import type { InvitationManager } from "../invitations/invitations.ts"
 import { logger } from '../logger.ts'
+import { number, object, optional, safeParse, string } from "valibot"
 
 const SERVER_ID: ServerID = 'world'
 
@@ -19,11 +20,32 @@ const buildRedirect = (targetHost: string, targetPath?: string): string => {
 	return url.toString()
 }
 
+const CheckAuthSchema = object({
+	id: number(),
+	message: object({
+		sessionCookie: optional(string()),
+		host: string(),
+		path: optional(string()),
+	})
+})
+
 function registerCheckAuthHandler(sessionManager: SessionManager) {
 	ipc.server.on(
 		'checkAuth',
 		(data: AuthCheck.Request, socket) => {
-			const { message: { sessionCookie, host, path }, id } = data
+			const parsed = safeParse(CheckAuthSchema, data)
+			if (!parsed.success) {
+				logger.warn({ errors: parsed.issues }, 'Invalid checkAuth request')
+				ipc.server.emit(socket, 'checkAuth', {
+					id: data.id,
+					message: {
+						authenticated: false,
+						redirect: buildRedirect(''),
+					}
+				} satisfies AuthCheck.Result)
+				return
+			}
+			const { message: { sessionCookie, host, path }, id } = parsed.output
 
 			// No session cookie provided
 			if (!sessionCookie) {
@@ -89,11 +111,24 @@ function registerCheckAuthHandler(sessionManager: SessionManager) {
 	)
 }
 
+const InvitationCodeSchema = object({
+	id: number(),
+})
+
 function registerInvitationCodeHandler(invitationManager: InvitationManager) {
 	ipc.server.on(
 		'getInvitationCode',
 		(data: InvitationCode.Request, socket) => {
-			const { id } = data
+			const parsed = safeParse(InvitationCodeSchema, data)
+			if (!parsed.success) {
+				logger.warn({ errors: parsed.issues }, 'Invalid getInvitationCode request')
+				ipc.server.emit(socket, 'getInvitationCode', {
+					id: data.id,
+					message: { error: 'Invalid request' }
+				} satisfies InvitationCode.Result)
+				return
+			}
+			const { id } = parsed.output
 
 			try {
 				const code = invitationManager.generateInvitationCode()
