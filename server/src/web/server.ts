@@ -30,19 +30,19 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 
 	// Register cookie and session plugins (required by Grant)
 	void fastify.register(cookie)
-	void fastify.register(session, {
-		secret: process.env.ENCRYPTION_KEY!,
-		cookieName: 'oauth_session',
-		cookie: {
-			secure: domain !== 'localhost',
-			httpOnly: true,
-			sameSite: 'lax', // Critical for OAuth callbacks
-			path: '/',
-			maxAge: 600000 // 10 minutes - only for OAuth flow
-		},
-		saveUninitialized: true, // Ensure session is saved even if not modified
-		logLevel: "info",
-	})
+	// void fastify.register(session, {
+	// 	secret: process.env.ENCRYPTION_KEY!,
+	// 	cookieName: 'oauth_session',
+	// 	cookie: {
+	// 		secure: domain !== 'localhost',
+	// 		httpOnly: true,
+	// 		sameSite: 'lax', // Critical for OAuth callbacks
+	// 		path: '/',
+	// 		maxAge: 600000 // 10 minutes - only for OAuth flow
+	// 	},
+	// 	saveUninitialized: true, // Ensure session is saved even if not modified
+	// 	logLevel: "info",
+	// })
 
 	// / - Root page - sets redirect cookies
 	fastify.get<{ Querystring: { host?: string, path?: string, error?: string } }>('/', function (request, reply) {
@@ -161,6 +161,8 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			url: request.url,
 			raw: request.raw.url,
 			sessionId: request.session?.sessionId,
+			reply_grant: reply.grant,
+			request_grant: request.grant,
 			cookies: Object.keys(request.cookies),
 			cookieHeader: request.headers.cookie
 		}, '---------------------- OAuth flow request')
@@ -171,10 +173,10 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		grant.default.fastify({
 			defaults: {
 				origin: ORIGIN,
-				transport: "querystring",
+				transport: "state",
 				state: true,
-				prefix: "/connect",
-				callback: "/auth/callback", // Our custom callback route
+				// prefix: "/connect",
+				// callback: "/auth/callback", // Our custom callback route
 			},
 			...grantOptions,
 		})
@@ -184,6 +186,8 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 	fastify.get('/auth/callback', async (request, reply) => {
 		// Access Grant's session data
 		const grantSession = request.session.grant
+
+		fastify.log.info(`callback!!! session grant: ${!!request.session.grant}, request state grant: ${!!request.grant}, reply state grant: ${!!reply.grant}`)
 
 		if (!grantSession) {
 			fastify.log.error('OAuth callback missing grant session')
