@@ -21,29 +21,6 @@ declare module '@fastify/session' {
 const PORT = process.env.PORT!
 if (!PORT) throw new Error("PORT not set in environment")
 
-
-// function makeStore() {
-// 	const store = new Map<string, any>()
-// 	return {
-// 		get: (id: string, cb: (session: any) => void) => {
-// 			console.log(`STORE GET ${id}: `, store.get(id))
-// 			cb(store.get(id))
-// 		},
-// 		set: (id: string, session: any, cb: () => void) => {
-// 			console.log(`STORE SET ${id}: `, session)
-// 			store.set(id, session)
-// 			cb()
-// 		},
-// 		destroy: (id: string, cb: () => void) => {
-// 			console.log(`STORE DESTROY ${id}`)
-// 			store.delete(id)
-// 			cb()
-// 		}
-// 	}
-// }
-
-// const DEBUG_STORE = makeStore()
-
 const COOKIE_NAME: CookieName = 'sso_session'
 export function webServer(sessionManager: SessionManager, invitationManager: InvitationManager) {
 
