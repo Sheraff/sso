@@ -62,7 +62,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			httpOnly: true,
 			sameSite: 'lax', // Critical for OAuth callbacks
 			path: '/',
-			maxAge: 6000000 // 10 minutes - only for OAuth flow
+			maxAge: 6600000 // 10 minutes - only for OAuth flow
 		},
 		saveUninitialized: true, // Save session even if empty - Grant needs this
 		rolling: false,
