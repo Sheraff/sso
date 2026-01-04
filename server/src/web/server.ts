@@ -68,9 +68,22 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		store: DEBUG_STORE,
 	})
 
+	// Ensure session is saved before Grant redirects
+	fastify.addHook('preHandler', async (request, reply) => {
+		if (request.url.startsWith('/connect/') && !request.url.includes('/callback')) {
+			// Initialize session if not already done, forcing it to be created and saved
+			if (request.session) {
+				await new Promise<void>((resolve) => {
+					request.session.save(() => resolve())
+				})
+			}
+		}
+	})
+
 	// Log all requests to /connect/* for debugging
 	fastify.addHook('onRequest', async (request, reply) => {
 		if (!request.url.startsWith('/connect/')) return
+		
 		fastify.log.info({
 			url: request.url,
 			raw: request.raw.url,
