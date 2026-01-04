@@ -245,6 +245,15 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 
 	// /auth/callback - Our custom callback route - receives all OAuth responses
 	fastify.get('/auth/callback', async (request, reply) => {
+		fastify.log.info({
+			sessionId: request.session?.sessionId,
+			hasGrant: !!request.session?.grant,
+			grantProvider: request.session?.grant?.provider,
+			grantResponseType: typeof request.session?.grant?.response,
+			grantResponseIsString: typeof request.session?.grant?.response === 'string',
+			cookies: Object.keys(request.cookies)
+		}, 'OAuth callback received')
+
 		// Access Grant's session data
 		const grantSession = request.session.grant
 
