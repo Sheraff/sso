@@ -5,7 +5,8 @@
 	"description": "",
 	"main": "index.ts",
 	"scripts": {
-		"start": "node --env-file=.env index.ts",
+		"dev": "node --env-file=.env index.ts",
+		"start": "NODE_ENV=production node --env-file=.env index.ts",
 		"invite": "node --env-file=.env invite.ts",
 		"test": "echo \"Error: no test specified\" && exit 1"
 	},
