@@ -5,12 +5,16 @@ A Single Sign-On (SSO) authentication system that enables multiple Node.js appli
 ## Features
 
 - 🔐 **OAuth 2.0 Authentication** - Support for many providers (currently GitHub, Google, Discord, Spotify, Twitch)
-- 🔒 **Invite-Only Registration** - Human-readable 3-word invitation codes
+- 🔒 **Invite-Only Registration** - Human-readable 3-word invitation codes from 5,757-word dictionary
 - 🚀 **IPC-Based Architecture** - Fast local authentication via Unix domain sockets
 - 🔑 **Multi-Provider Accounts** - Link multiple OAuth providers to one user identity
-- 🍪 **Shared Sessions** - Session cookies work across subdomains
-- 🔐 **AES-256-GCM Encryption** - Industry-standard encryption for sensitive data
+- 🍪 **Shared Sessions** - Session cookies work across subdomains with automatic 50-day refresh
+- 🔐 **AES-256-GCM Encryption** - Industry-standard encryption with random salt/IV per encryption
 - 📦 **Monorepo Structure** - Separate server and client packages
+- 🎨 **Dark Mode Support** - Full dark mode signin UI via prefers-color-scheme
+- 📊 **Structured Logging** - Pino-based logging with component-level child loggers
+- 🔄 **Auto-Reconnection** - IPC client automatically reconnects on disconnect
+- 🛡️ **Rate Limiting** - Exponential backoff on invitation validation (up to 60s)
 
 ## Architecture
 
@@ -78,15 +82,15 @@ Each OAuth provider requires you to create an application/client in their develo
 All providers use the same callback URL pattern:
 
 ```
-{ORIGIN}/api/oauth/connect/{provider}/callback
+{ORIGIN}/connect/{provider}/callback
 ```
 
 For example, with `ORIGIN=https://auth.example.com`:
-- GitHub: `https://auth.example.com/api/oauth/connect/github/callback`
-- Google: `https://auth.example.com/api/oauth/connect/google/callback`
-- Discord: `https://auth.example.com/api/oauth/connect/discord/callback`
-- Spotify: `https://auth.example.com/api/oauth/connect/spotify/callback`
-- Twitch: `https://auth.example.com/api/oauth/connect/twitch/callback`
+- GitHub: `https://auth.example.com/connect/github/callback`
+- Google: `https://auth.example.com/connect/google/callback`
+- Discord: `https://auth.example.com/connect/discord/callback`
+- Spotify: `https://auth.example.com/connect/spotify/callback`
+- Twitch: `https://auth.example.com/connect/twitch/callback`
 
 ### OAuth Flow
 
@@ -173,10 +177,11 @@ Invitation codes are **human-readable 3-word combinations** generated from a cur
 ### Code Generation
 
 The `generateCode()` function:
-1. Reads 5-letter words from `server/src/invitations/5-letter-words.txt`
+1. Reads from a curated list of 5,757 five-letter words (`server/src/invitations/5-letter-words.txt`)
 2. Randomly selects 3 unique words
 3. Checks against existing codes to prevent collisions
 4. Returns space-separated word combination
+5. Includes rate limiting with exponential backoff (up to 60s) for validation attempts
 
 ### Signup Flow
 
@@ -193,13 +198,20 @@ The `generateCode()` function:
 
 ### Administrative Tasks
 
-**Generating Invitation Codes** (requires database access):
+**Generating Invitation Codes:**
 
-TODO: add `pnpm invite` script in package.json to generate and store codes
-1. import client
-2. call server through IPC to ask for new code (`getInvitationCode()`)
-3. log generated code to the console
-4. exit
+Use the built-in script to generate new invitation codes:
+
+```bash
+cd server
+pnpm invite
+```
+
+This script:
+1. Connects to the SSO server via IPC
+2. Calls `getInvitationCode()` to generate and store a new code
+3. Displays the code in the console
+4. Exits automatically
 
 ## Client API Usage
 
@@ -219,11 +231,18 @@ import { createSsoClient } from '@sso/client'
 const sso = createSsoClient('my-app')
 
 // Check authentication
-const result = await sso.checkAuth(sessionCookie)
+const result = await sso.checkAuth(
+  req.cookies[COOKIE_NAME],
+  'myapp.example.com',
+)
 
 if (result.authenticated) {
-  console.log('User:', result.user)
-  // { id: '...', email: 'user@example.com' }
+  console.log('User ID:', result.user_id)
+  // 'a1b2c3d4-...'
+  if (result.cookie) {
+    // Update cookie if session was refreshed
+    res.cookie(COOKIE_NAME, result.cookie, { httpOnly: true, secure: true, domain: '.example.com', sameSite: 'lax' })
+  }
 } else {
   console.log('Redirect to:', result.redirect)
   // 'http://localhost:3000/?host=myapp.example.com&path=/dashboard'
@@ -251,12 +270,14 @@ The client automatically:
 - Connects to the SSO server via Unix domain socket
 - Handles reconnection on disconnect (1000ms retry interval)
 
-#### `ssoClient.checkAuth(cookie?: string): Promise<AuthCheckResult>`
+#### `ssoClient.checkAuth(cookie: string | undefined, host: string, path: string): Promise<AuthCheckResult>`
 
 Validates a session cookie and returns authentication status.
 
 **Parameters:**
-- `cookie` (string, optional): Session cookie value from incoming request
+- `cookie` (string | undefined): Session cookie value from incoming request (or `undefined` if not present)
+- `host` (string): The hostname of the requesting application (e.g., `'app.example.com'`)
+- `path` (string): The requested path (e.g., `'/dashboard'`)
 
 **Returns:** `Promise<AuthCheckResult>`
 
@@ -266,10 +287,7 @@ Validates a session cookie and returns authentication status.
 // Authenticated user
 {
   authenticated: true,
-  user: {
-    id: string,        // User UUID
-    email: string      // User email
-  },
+  user_id: string,     // User UUID
   cookie?: string      // Updated cookie if session was refreshed
 }
 
@@ -296,7 +314,7 @@ async function requireAuth(req, res, next) {
   const sessionCookie = req.cookies[COOKIE_NAME]
   
   try {
-    const result = await sso.checkAuth(sessionCookie)
+    const result = await sso.checkAuth(sessionCookie, req.hostname, req.path)
     
     if (result.authenticated) {
       // Update cookie if refreshed
@@ -310,12 +328,10 @@ async function requireAuth(req, res, next) {
       }
       
       // Attach user to request
-      req.user = result.user
+      req.user = { id: result.user_id }
       next()
     } else {
-      // Redirect to SSO with return path
-      const host = req.hostname
-      const path = req.originalUrl
+      // Redirect to SSO (URL already includes host/path)
       res.redirect(result.redirect)
     }
   } catch (error) {
@@ -353,7 +369,7 @@ fastify.decorate('authenticate', async (request, reply) => {
   const sessionCookie = request.cookies[COOKIE_NAME]
   
   try {
-    const result = await sso.checkAuth(sessionCookie)
+    const result = await sso.checkAuth(sessionCookie, request.hostname, request.url)
     
     if (result.authenticated) {
       // Update cookie if refreshed
@@ -366,7 +382,7 @@ fastify.decorate('authenticate', async (request, reply) => {
         })
       }
       
-      request.user = result.user
+      request.user = { id: result.user_id }
     } else {
       reply.redirect(result.redirect)
     }
@@ -399,9 +415,11 @@ const sso = createSsoClient('nextjs-app')
 
 export async function middleware(request: NextRequest) {
   const sessionCookie = request.cookies.get(COOKIE_NAME)?.value
+  const host = request.headers.get('host') || ''
+  const path = request.nextUrl.pathname
   
   try {
-    const result = await sso.checkAuth(sessionCookie)
+    const result = await sso.checkAuth(sessionCookie, host, path)
     
     if (result.authenticated) {
       const response = NextResponse.next()
@@ -416,9 +434,8 @@ export async function middleware(request: NextRequest) {
         })
       }
       
-      // Pass user data to page via header
-      response.headers.set('x-user-id', result.user.id)
-      response.headers.set('x-user-email', result.user.email)
+      // Pass user ID to page via header
+      response.headers.set('x-user-id', result.user_id)
       
       return response
     } else {
@@ -449,14 +466,16 @@ const server = new ApolloServer({
   resolvers,
   context: async ({ req }) => {
     const sessionCookie = req.cookies[COOKIE_NAME]
-    const result = await sso.checkAuth(sessionCookie)
+    const host = req.hostname || req.headers.host || ''
+    const path = req.path || '/'
+    const result = await sso.checkAuth(sessionCookie, host, path)
     
     if (!result.authenticated) {
       throw new Error('Unauthenticated')
     }
     
     return {
-      user: result.user
+      userId: result.user_id
     }
   }
 })
@@ -475,14 +494,14 @@ const sso = createSsoClient('api-server')
 
 // Multiple simultaneous checks
 const results = await Promise.all([
-  sso.checkAuth(cookie1),
-  sso.checkAuth(cookie2),
-  sso.checkAuth(cookie3)
+  sso.checkAuth(cookie1, host1, path1),
+  sso.checkAuth(cookie2, host2, path2),
+  sso.checkAuth(cookie3, host3, path3)
 ])
 
 results.forEach((result, i) => {
   if (result.authenticated) {
-    console.log(`Request ${i}: User ${result.user.email}`)
+    console.log(`Request ${i}: User ${result.user_id}`)
   } else {
     console.log(`Request ${i}: Redirect to ${result.redirect}`)
   }
@@ -494,15 +513,15 @@ results.forEach((result, i) => {
 Always check for updated cookies to maintain session freshness:
 
 ```typescript
-async function authenticateRequest(cookie) {
-  const result = await sso.checkAuth(cookie)
+async function authenticateRequest(cookie, host, path) {
+  const result = await sso.checkAuth(cookie, host, path)
   
   if (result.authenticated) {
     // Important: Use the updated cookie if provided
     const sessionCookie = result.cookie || cookie
     
     return {
-      user: result.user,
+      userId: result.user_id,
       cookie: sessionCookie
     }
   }
@@ -514,10 +533,10 @@ async function authenticateRequest(cookie) {
 #### Error Handling and Retry Logic
 
 ```typescript
-async function checkAuthWithRetry(cookie, retries = 3) {
+async function checkAuthWithRetry(cookie, host, path, retries = 3) {
   for (let i = 0; i < retries; i++) {
     try {
-      const result = await sso.checkAuth(cookie)
+      const result = await sso.checkAuth(cookie, host, path)
       return result
     } catch (error) {
       console.error(`Auth check attempt ${i + 1} failed:`, error)
@@ -556,7 +575,7 @@ To customize this behavior in your application:
 
 ```typescript
 async function requireAuth(req, res, next) {
-  const result = await sso.checkAuth(req.cookies[COOKIE_NAME])
+  const result = await sso.checkAuth(req.cookies[COOKIE_NAME], req.hostname, req.path)
   
   if (!result.authenticated) {
     // The redirect URL already includes return path
@@ -579,7 +598,7 @@ const sso = createSsoClient('my-app')
 async function checkSsoHealth() {
   try {
     // Attempt auth check with no cookie
-    const result = await sso.checkAuth()
+    const result = await sso.checkAuth(undefined, 'localhost', '/health')
     
     // If we get a redirect response, SSO is healthy
     if (!result.authenticated && result.redirect) {
@@ -671,12 +690,15 @@ sso/
     ├── package.json
     ├── tsconfig.json
     └── src/
-        ├── schema.sql       # Database schema
         ├── domain.ts        # Domain extraction for cookies
-        ├── encryption.ts    # AES-256-GCM encryption
+        ├── logger.ts        # Pino structured logging
+        ├── schema.sql       # Database schema
         ├── invitations/
+        │   ├── 5-letter-words.txt   # Word list (5,757 words)
         │   ├── generateCode.ts      # Invitation code generator
-        │   └── 5-letter-words.txt   # Word list
+        │   └── invitations.ts       # Invitation management
+        ├── ipc/
+        │   └── server.ts    # IPC server implementation
         ├── providers/       # OAuth provider implementations
         │   ├── index.ts     # Provider orchestration
         │   ├── github.ts
@@ -684,8 +706,12 @@ sso/
         │   ├── discord.ts
         │   ├── spotify.ts
         │   └── twitch.ts
+        ├── sessions/
+        │   ├── encryption.ts  # AES-256-GCM encryption
+        │   └── sessions.ts    # Session management
         └── web/
-            └── server.ts    # Fastify web server
+            ├── server.ts      # Fastify web server
+            └── signin.html    # Authentication UI with dark mode
 ```
 
 ## Security Features
@@ -730,6 +756,11 @@ Session cookies are shared across subdomains:
   maxAge: 7 * 24 * 60 * 60 * 1000  // 7 days
 }
 ```
+
+**Additional Cookies:**
+- `lastProvider`: Remembers the last OAuth provider used (highlights it in UI with "Last used" label)
+- Session cookies are refreshed on every `checkAuth()` call, extending expiration by 50 days
+- Each encryption uses unique salt/IV, so cookie values change even for the same session
 
 ### Domain Validation
 
@@ -800,44 +831,35 @@ The server validates redirect hosts to prevent open redirect vulnerabilities:
 
 ### ✅ Completed Features
 
-- OAuth provider integrations (GitHub, Google, Discord, Spotify, Twitch)
-- Database schema with multi-provider support
-- AES-256-GCM encryption system
-- Invitation code generation
-- IPC infrastructure (server and client)
-- Web server skeleton with Grant middleware
-- Type-safe OAuth response validation (Valibot)
+- OAuth provider integrations (GitHub, Google, Discord, Spotify, Twitch) with Valibot validation
+- Database schema with multi-provider support and automatic initialization
+- AES-256-GCM encryption system with random iterations/salt/IV
+- Invitation code generation from 5,757-word dictionary
+- IPC infrastructure (server and client with auto-reconnection)
+- Web server with Grant middleware and Fastify
+- Authentication UI with dark mode support
+- Session management (creation, validation, refresh, cleanup)
+- IPC authentication handler (checkAuth and getInvitationCode)
+- Client library with full implementation
+- Invitation flow with rate limiting and validation
+- Host validation for redirect URL security
 - Domain extraction for cookie sharing
-- Automatic database initialization
+- Structured logging with Pino
+- WAL mode SQLite for concurrent access
+- Automatic cleanup of expired sessions and invitations
 
-### 🚧 In Progress / Planned
+### 🚧 Known Limitations
 
-- **Authentication UI**: Root `/` route currently returns stub response
-- **Session Management**: Cookie creation, validation, and refresh logic
-- **IPC Authentication Handler**: Currently echoes messages, needs full implementation
-- **Client Library**: `createSsoClient()` function needs to be exported and completed
-- **Invitation Flow**: UI for entering invitation codes and validation
-- **Host Validation**: Redirect URL security checks
-- **Error Handling**: Comprehensive error handling and user feedback
-- **Testing**: Unit and integration tests
-- **Documentation**: API documentation and examples
-
-### Known Limitations
-
-1. **No UI**: Web interface is not implemented (returns `{ hello: 'world' }`)
-2. **Client Export**: `createSsoClient` is defined but not exported from `@sso/client`
-3. **Session Logic**: Session creation/validation not implemented
-4. **Invitation Storage**: Database schema doesn't include `invitations` table
-5. **Production Hardening**: Needs rate limiting, proper logging, monitoring
+1. **Testing**: Unit and integration tests needed
+2. **Production Monitoring**: Metrics and monitoring integration needed
+3. **Account Linking UI**: No UI flow for linking additional providers to existing account
 
 ## Contributing
 
 This is currently a work-in-progress project. Key areas for contribution:
 
 1. **Web UI**: Implement authentication interface with OAuth provider selection
-2. **Session Management**: Implement secure session creation and validation
-3. **Client Library**: Complete `SsoClient` implementation
-4. **Testing**: Add comprehensive test coverage
-5. **Documentation**: Expand examples and use cases
+2. **Testing**: Add comprehensive test coverage
+3. **Documentation**: Expand examples and use cases
 
 

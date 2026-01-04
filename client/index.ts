@@ -76,7 +76,7 @@ export namespace InvitationCode {
  * )
  * 
  * if (result.authenticated) {
- *   console.log('User:', result.user.email)
+ *   console.log('User ID:', result.user_id)
  *   // Update cookie if refreshed
  *   if (result.cookie) {
  *     res.cookie(COOKIE_NAME, result.cookie, { httpOnly: true, secure: true })
