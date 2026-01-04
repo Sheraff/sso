@@ -97,7 +97,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 
 	// Register Grant middleware
 	void fastify.register(
-		grant.default.fastify({ 
+		grant.default.fastify({
 			defaults: {
 				origin: ORIGIN,
 				transport: "session",
@@ -217,26 +217,12 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			}
 		}
 
-		if (!request.session)
-			fastify.log.error('No session found on /submit/:provider request')
+		// Touch the session to mark it as modified - this forces @fastify/session to set the cookie
+		// Even with saveUninitialized: true, we need to access the session to trigger cookie generation
+		request.session.touch()
 
-		// Save session and wait for it to complete before redirecting
-		try {
-			await new Promise<void>((resolve, reject) => {
-				request.session.save((err) => {
-					if (err) {
-						fastify.log.error({ err }, 'Failed to save session before OAuth redirect')
-						reject(err)
-					} else {
-						fastify.log.info({ sessionId: request.session.sessionId }, 'Session saved before OAuth redirect')
-						resolve()
-					}
-				})
-			})
-			return reply.redirect(`/connect/${provider}`)
-		} catch (err) {
-			return reply.redirect('/', 500)
-		}
+		// Don't manually save - let @fastify/session handle it automatically on response
+		return reply.redirect(`/connect/${provider}`)
 
 
 	})
