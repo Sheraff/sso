@@ -82,7 +82,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 				if (request.session) request.session.save(() => next())
 				else next()
 			}
-		} else if (routeOptions.url === '/connect/:provider/callback') {
+		} else if (routeOptions.url === '/connect/:provider/:override') {
 			routeOptions.onSend = (request, reply, payload, done) => {
 				if (request.session) request.session.save(() => done(null, payload))
 				else done(null, payload)
