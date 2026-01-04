@@ -34,12 +34,14 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		cookie: {
 			secure: domain !== 'localhost',
 			httpOnly: true,
+			sameSite: 'lax', // Critical for OAuth callbacks
+			path: '/',
 			maxAge: 600000 // 10 minutes - only for OAuth flow
 		}
 	})
 
-	// Root page - sets redirect cookies
-	fastify.get<{ Querystring: { host?: string, path?: string } }>('/', function (request, reply) {
+	// / - Root page - sets redirect cookies
+	fastify.get<{ Querystring: { host?: string, path?: string, error?: string } }>('/', function (request, reply) {
 		/**
 		 * Serve a web page that allows
 		 * - signing in with OAuth providers (available providers from grantOptions)
@@ -47,6 +49,15 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		 * 
 		 * Links to /connect/{provider} (no query params needed)
 		 */
+
+		// Log OAuth errors from Grant
+		if (request.query.error) {
+			fastify.log.error({
+				error: request.query.error,
+				cookies: request.cookies,
+				headers: request.headers
+			}, 'OAuth error redirected to root')
+		}
 
 		const providers = Object.entries(grantOptions).filter((p) => p[1])
 		const lastProvider = request.cookies.last_provider
@@ -85,7 +96,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		reply.type('text/html').send(html)
 	})
 
-	// Submit route - validates invitation code and redirects
+	// /submit/:provider - Submit route - validates invitation code and redirects
 	fastify.get<{ Querystring: { inviteCode?: string, host?: string, path?: string }, Params: { provider: string } }>('/submit/:provider', async function (request, reply) {
 		const { provider } = request.params
 
@@ -154,7 +165,20 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		})
 	)
 
-	// Our custom callback route - receives all OAuth responses
+	// // Debug handler for Grant's default callback path
+	// fastify.get('/connect/:provider/callback', async (request, reply) => {
+	// 	fastify.log.info({
+	// 		provider: (request.params as any).provider,
+	// 		query: request.query,
+	// 		sessionId: request.session.sessionId,
+	// 		hasGrant: !!request.session.grant,
+	// 		cookies: Object.keys(request.cookies)
+	// 	}, 'Grant callback received')
+	// 	// Let Grant's middleware handle this
+	// 	// This shouldn't normally be hit as Grant should handle it first
+	// })
+
+	// /auth/callback - Our custom callback route - receives all OAuth responses
 	fastify.get('/auth/callback', async (request, reply) => {
 		// Access Grant's session data
 		const grantSession = request.session.grant
