@@ -24,7 +24,8 @@ const COOKIE_NAME: CookieName = 'sso_session'
 export function webServer(sessionManager: SessionManager, invitationManager: InvitationManager) {
 
 	const fastify = Fastify({
-		loggerInstance: logger.child({ component: 'web-server' })
+		loggerInstance: logger.child({ component: 'web-server' }),
+		trustProxy: true, // Required when behind nginx/reverse proxy for secure cookies
 	})
 
 	// Register cookie and session plugins (required by Grant)
