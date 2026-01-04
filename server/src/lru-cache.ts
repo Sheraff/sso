@@ -1,8 +1,8 @@
 export type LRUCache<TKey, TValue> = {
-	get: (key: TKey, cb: (value: TValue | undefined) => void) => void
-	set: (key: TKey, value: TValue, cb: () => void) => void
-	destroy: (key: TKey, cb: () => void) => void
-	clear: (cb: () => void) => void
+	get: (key: TKey, cb: (err: any, value?: TValue) => void) => void
+	set: (key: TKey, value: TValue, cb: (err?: any) => void) => void
+	destroy: (key: TKey, cb: (err?: any) => void) => void
+	clear: (cb: (err?: any) => void) => void
 }
 
 export function createLRUCache<TKey, TValue>(
@@ -38,9 +38,9 @@ export function createLRUCache<TKey, TValue>(
 	return {
 		get(key, cb) {
 			const entry = cache.get(key)
-			if (!entry) return cb(undefined)
+			if (!entry) return cb(null, undefined)
 			touch(entry)
-			cb(entry.value)
+			cb(null, entry.value)
 		},
 		set(key, value, cb) {
 			if (cache.size >= max && oldest) {
