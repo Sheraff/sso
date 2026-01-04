@@ -221,7 +221,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 
 		// Ensure session is saved before redirecting to Grant
 		if (!request.session.isSaved())
-			await new Promise(resolve => request.session.save(resolve))
+			await new Promise<void>(resolve => request.session.save(() => resolve()))
 		else
 			fastify.log.trace('Session already saved before /submit/:provider redirect')
 
