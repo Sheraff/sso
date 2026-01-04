@@ -3,7 +3,7 @@ import cookie from '@fastify/cookie'
 import session from '@fastify/session'
 import grant from "grant"
 import { readFileSync } from 'node:fs'
-import { grantOptions, getGrantData, type RawGrant } from "../providers/index.ts"
+import { grantOptions, getGrantData, type RawGrant, providerMetas } from "../providers/index.ts"
 import { domain, hostname, ORIGIN, validateRedirectHost } from "../domain.ts"
 import type { CookieName } from "@sso/client"
 import { type SessionManager } from "../sessions/sessions.ts"
@@ -87,12 +87,15 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		let html = readFileSync(new URL('./signin.html', import.meta.url), 'utf-8')
 
 		// Inject provider buttons
-		const providerButtons = providers.map(([name]) => {
-			const isLastUsed = name === lastProvider
-			const displayName = name.charAt(0).toUpperCase() + name.slice(1)
-			const label = isLastUsed ? `${displayName} (Last used)` : displayName
+		const providerButtons = providers.map(([key]) => {
+			const meta = providerMetas[key as keyof typeof providerMetas]
+			const isLastUsed = key === lastProvider
+			const label = isLastUsed ? `${meta.name} (Last used)` : meta.name
 			const className = isLastUsed ? 'provider-btn last-used' : 'provider-btn'
-			return `<button type="submit" formaction="/submit/${name}" class="${className}">${label}</button>`
+			return `<button type="submit" formaction="/submit/${key}" class="${className}" style="--provider-color: ${meta.color};">
+				<svg role="img" viewBox="0 0 24 24"><path d="${meta.svg}"/></svg>
+				<span>${label}</span>
+			</button>`
 		}).join('\n\t\t\t\t')
 
 		html = html.replace('<!-- PROVIDER_BUTTONS -->', providerButtons)

@@ -14,6 +14,12 @@ export type RawGrant = {
 	}
 }
 
+export type ProviderMeta = {
+	name: string
+	color: string
+	svg: string
+}
+
 /**
  * We assume that every oauth server will be able to provide
  * - an email address (careful, this might not be validated by the server, thus might not be enough to sync multiple providers based on same email)
@@ -46,4 +52,12 @@ export const grantOptions = {
 	spotify: Spotify.options,
 	discord: Discord.options,
 	github: Github.options,
+}
+
+export const providerMetas = {
+	twitch: Twitch.meta,
+	google: Google.meta,
+	spotify: Spotify.meta,
+	discord: Discord.meta,
+	github: Github.meta,
 }

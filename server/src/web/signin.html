@@ -39,10 +39,10 @@
 
 		.section {
 			margin-bottom: 32px;
-		}
 
-		.section:last-child {
-			margin-bottom: 0;
+			&:last-child {
+				margin-bottom: 0;
+			}
 		}
 
 		.section-title {
@@ -58,11 +58,11 @@
 			border: 1px solid #ccc;
 			font-size: 14px;
 			font-family: inherit;
-		}
 
-		input[type="text"]:focus {
-			outline: none;
-			border-color: #999;
+			&:focus {
+				outline: none;
+				border-color: #999;
+			}
 		}
 
 		.provider-buttons {
@@ -72,32 +72,39 @@
 		}
 
 		.provider-btn {
-			display: block;
+			display: flex;
+			column-gap: 4px;
+			justify-content: center;
+			align-items: center;
 			padding: 10px 16px;
 			border: 1px solid #ccc;
 			background: white;
-			color: #333;
+			color: var(--provider-color);
 			font-size: 14px;
 			font-weight: 500;
 			cursor: pointer;
 			text-decoration: none;
 			text-align: center;
 			font-family: inherit;
-		}
 
-		.provider-btn:hover {
-			background: #fafafa;
-			border-color: #999;
-		}
+			svg {
+				fill: var(--provider-color);
+				width: 20px;
+			}
 
-		.provider-btn.last-used {
-			background: #f0f7ff;
-			border-color: #4a90e2;
-		}
+			&:hover {
+				background: #fafafa;
+				border-color: var(--provider-color);
+			}
 
-		.provider-btn.last-used:hover {
-			background: #e3f0ff;
-			border-color: #357abd;
+			&.last-used {
+				background: #f0f7ff;
+				border-color: var(--provider-color);
+
+				&:hover {
+					background: #e3f0ff;
+				}
+			}
 		}
 
 		hr {
@@ -128,35 +135,32 @@
 				background: #333;
 				border-color: #555;
 				color: #e0e0e0;
-			}
 
-			input[type="text"]:focus {
-				border-color: #777;
-			}
+				&:focus {
+					border-color: #777;
+				}
 
-			input[type="text"]::placeholder {
-				color: #777;
+				&::placeholder {
+					color: #777;
+				}
 			}
 
 			.provider-btn {
 				background: #333;
-				border-color: #555;
+
 				color: #e0e0e0;
-			}
 
-			.provider-btn:hover {
-				background: #3a3a3a;
-				border-color: #666;
-			}
+				&:hover {
+					background: #3a3a3a;
+				}
 
-			.provider-btn.last-used {
-				background: #1a3a52;
-				border-color: #4a90e2;
-			}
+				&.last-used {
+					background: #1a3a52;
 
-			.provider-btn.last-used:hover {
-				background: #244a62;
-				border-color: #5fa3f5;
+					&:hover {
+						background: #244a62;
+					}
+				}
 			}
 
 			hr {
