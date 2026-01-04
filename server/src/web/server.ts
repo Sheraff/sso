@@ -41,6 +41,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			maxAge: 600000 // 10 minutes - only for OAuth flow
 		},
 		saveUninitialized: true, // Ensure session is saved even if not modified
+		logLevel: "info",
 	})
 
 	// / - Root page - sets redirect cookies
@@ -152,6 +153,18 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		}
 
 		return reply.redirect(`/connect/${provider}`)
+	})
+
+	// Log all requests to /connect/* for debugging
+	fastify.addHook('onRequest', async (request, reply) => {
+		if (request.url.startsWith('/connect')) {
+			fastify.log.info({
+				url: request.url,
+				sessionId: request.session?.sessionId,
+				cookies: Object.keys(request.cookies),
+				cookieHeader: request.headers.cookie
+			}, 'OAuth flow request')
+		}
 	})
 
 	// Register Grant middleware
