@@ -167,19 +167,6 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		})
 	)
 
-	// Debug handler for Grant's default callback path
-	fastify.get('/connect/:provider/callback', async (request, reply) => {
-		fastify.log.info({
-			provider: (request.params as any).provider,
-			query: request.query,
-			sessionId: request.session.sessionId,
-			hasGrant: !!request.session.grant,
-			cookies: Object.keys(request.cookies)
-		}, 'Grant callback received')
-		// Let Grant's middleware handle this
-		// This shouldn't normally be hit as Grant should handle it first
-	})
-
 	// /auth/callback - Our custom callback route - receives all OAuth responses
 	fastify.get('/auth/callback', async (request, reply) => {
 		// Access Grant's session data
