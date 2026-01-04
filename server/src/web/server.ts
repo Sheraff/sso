@@ -130,6 +130,26 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		}
 	})
 
+	// CRITICAL: Force session save before Grant redirects to custom callback
+	fastify.addHook('onSend', async (request, reply) => {
+		if (request.url.includes('/connect/') && request.url.includes('/callback') && reply.statusCode === 302) {
+			// Grant is about to redirect - ensure session is saved first
+			if (request.session && request.session.grant?.response && typeof request.session.grant.response === 'object') {
+				await new Promise<void>((resolve, reject) => {
+					request.session.save((err) => {
+						if (err) {
+							fastify.log.error({ err }, 'Failed to save session before redirect')
+							reject(err)
+						} else {
+							fastify.log.info({ sessionId: request.session.sessionId }, 'Session saved before redirect to custom callback')
+							resolve()
+						}
+					})
+				})
+			}
+		}
+	})
+
 	// / - Root page - sets redirect cookies
 	fastify.get<{ Querystring: { host?: string, path?: string, error?: string } }>('/', function (request, reply) {
 		/**
