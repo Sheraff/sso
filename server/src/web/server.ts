@@ -30,19 +30,19 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 
 	// Register cookie and session plugins (required by Grant)
 	void fastify.register(cookie)
-	// void fastify.register(session, {
-	// 	secret: process.env.ENCRYPTION_KEY!,
-	// 	cookieName: 'oauth_session',
-	// 	cookie: {
-	// 		secure: domain !== 'localhost',
-	// 		httpOnly: true,
-	// 		sameSite: 'lax', // Critical for OAuth callbacks
-	// 		path: '/',
-	// 		maxAge: 600000 // 10 minutes - only for OAuth flow
-	// 	},
-	// 	saveUninitialized: true, // Ensure session is saved even if not modified
-	// 	logLevel: "info",
-	// })
+	void fastify.register(session, {
+		secret: process.env.ENCRYPTION_KEY!,
+		cookie: {
+			domain: domain === 'localhost' ? undefined : `.${domain}`,
+			secure: domain !== 'localhost',
+			httpOnly: true,
+			sameSite: 'lax', // Critical for OAuth callbacks
+			path: '/',
+			maxAge: 600000 // 10 minutes - only for OAuth flow
+		},
+		saveUninitialized: true, // Ensure session is saved even if not modified
+		logLevel: "info",
+	})
 
 	// / - Root page - sets redirect cookies
 	fastify.get<{ Querystring: { host?: string, path?: string, error?: string } }>('/', function (request, reply) {
