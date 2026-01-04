@@ -56,7 +56,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 	void fastify.register(session, {
 		secret: process.env.ENCRYPTION_KEY!,
 		cookie: {
-			domain: domain === 'localhost' ? undefined : hostname,
+			// No domain set - defaults to exact hostname (sso.florianpellet.com)
 			secure: domain !== 'localhost',
 			httpOnly: true,
 			sameSite: 'lax', // Critical for OAuth callbacks
