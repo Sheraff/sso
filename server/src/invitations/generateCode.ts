@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 const CODE_LENGTH = 3
 
 export function generateCode(existingCodes: string[]) {
-	const WORDS = readFileSync(new URL('./words.txt', import.meta.url), 'utf-8').split("\n")
+	const WORDS = readFileSync(new URL('./5-letter-words.txt', import.meta.url), 'utf-8').split("\n")
 	const count = WORDS.length
 	while (true) {
 		const indices: number[] = []
