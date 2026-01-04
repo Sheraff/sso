@@ -38,7 +38,7 @@ export function createLRUCache<TKey, TValue>(
 	return {
 		get(key, cb) {
 			const entry = cache.get(key)
-			if (!entry) return cb(null, undefined)
+			if (!entry) return cb(null, entry)
 			touch(entry)
 			cb(null, entry.value)
 		},

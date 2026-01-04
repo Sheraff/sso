@@ -1,4 +1,4 @@
-import Fastify from 'fastify'
+import Fastify, { Session } from 'fastify'
 import cookie from '@fastify/cookie'
 import session from '@fastify/session'
 import grant from "grant"
@@ -67,37 +67,20 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		saveUninitialized: true, // Save session even if empty - Grant needs this
 		rolling: false,
 		logLevel: "trace",
-		// store: createLRUCache(20),
+		store: createLRUCache<string, Session>(20),
 	})
 
-	// Ensure session is saved before Grant redirects
-	fastify.addHook('preHandler', async (request, reply) => {
-		if (request.url.startsWith('/connect/') && !request.url.includes('/callback')) {
-			// Initialize session if not already done, forcing it to be created and saved
-			if (request.session) {
-				await new Promise<void>((resolve) => {
-					request.session.save(() => resolve())
-				})
-			}
-		}
-	})
-
-	// Log all requests to /connect/* for debugging
-	fastify.addHook('onRequest', async (request, reply) => {
-		if (!request.url.startsWith('/connect/')) return
-
-		fastify.log.info({
-			url: request.url,
-			raw: request.raw.url,
-			sessionId: request.session?.sessionId,
-			hasGrant: !!request.session?.grant,
-			grantProvider: request.session?.grant?.provider,
-			grantResponseType: typeof request.session?.grant?.response,
-			cookies: Object.keys(request.cookies),
-			cookieHeader: request.headers.cookie,
-			queryParams: request.query
-		}, '---------------------- OAuth flow request')
-	})
+	// // Ensure session is saved before Grant redirects
+	// fastify.addHook('preHandler', async (request, reply) => {
+	// 	if (request.url.startsWith('/connect/') && !request.url.includes('/callback')) {
+	// 		// Initialize session if not already done, forcing it to be created and saved
+	// 		if (request.session) {
+	// 			await new Promise<void>((resolve) => {
+	// 				request.session.save(() => resolve())
+	// 			})
+	// 		}
+	// 	}
+	// })
 
 	// Register Grant middleware
 	void fastify.register(
@@ -113,28 +96,11 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		})
 	)
 
-	// Debug: Log what Grant puts in the session after callback
-	fastify.addHook('onResponse', async (request, reply) => {
-		if (request.url.includes('/connect/') && request.url.includes('/callback')) {
-			fastify.log.info({
-				url: request.url,
-				statusCode: reply.statusCode,
-				sessionId: request.session?.sessionId,
-				hasGrant: !!request.session?.grant,
-				grantKeys: request.session?.grant ? Object.keys(request.session.grant) : [],
-				grantResponseType: typeof request.session?.grant?.response,
-				grantResponseKeys: request.session?.grant?.response && typeof request.session.grant.response === 'object'
-					? Object.keys(request.session.grant.response)
-					: 'not an object',
-			}, 'After Grant callback processing')
-		}
-	})
-
 	// CRITICAL: Force session save before Grant redirects to custom callback
 	fastify.addHook('onSend', async (request, reply) => {
-		if (request.url.includes('/connect/') && request.url.includes('/callback') && reply.statusCode === 302) {
+		if (request.url.startsWith('/connect/')) {
 			// Grant is about to redirect - ensure session is saved first
-			if (request.session && request.session.grant?.response && typeof request.session.grant.response === 'object') {
+			if (request.session) {
 				await new Promise<void>((resolve, reject) => {
 					request.session.save((err) => {
 						if (err) {
@@ -286,15 +252,6 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 
 	// /auth/callback - Our custom callback route - receives all OAuth responses
 	fastify.get('/auth/callback', async (request, reply) => {
-		fastify.log.info({
-			sessionId: request.session?.sessionId,
-			hasGrant: !!request.session?.grant,
-			grantProvider: request.session?.grant?.provider,
-			grantResponseType: typeof request.session?.grant?.response,
-			grantResponseIsString: typeof request.session?.grant?.response === 'string',
-			cookies: Object.keys(request.cookies)
-		}, 'OAuth callback received')
-
 		// Access Grant's session data
 		const grantSession = request.session.grant
 
