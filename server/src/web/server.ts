@@ -70,17 +70,17 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		// store: createLRUCache(20),
 	})
 
-	// // Ensure session is saved before Grant redirects
-	// fastify.addHook('preHandler', async (request, reply) => {
-	// 	if (request.url.startsWith('/connect/') && !request.url.includes('/callback')) {
-	// 		// Initialize session if not already done, forcing it to be created and saved
-	// 		if (request.session) {
-	// 			await new Promise<void>((resolve) => {
-	// 				request.session.save(() => resolve())
-	// 			})
-	// 		}
-	// 	}
-	// })
+	// Ensure session is saved before Grant redirects
+	fastify.addHook('preHandler', async (request, reply) => {
+		if (request.url.startsWith('/connect/') && !request.url.includes('/callback')) {
+			// Initialize session if not already done, forcing it to be created and saved
+			if (request.session) {
+				await new Promise<void>((resolve) => {
+					request.session.save(() => resolve())
+				})
+			}
+		}
+	})
 
 	// Log all requests to /connect/* for debugging
 	fastify.addHook('onRequest', async (request, reply) => {
@@ -217,26 +217,28 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			}
 		}
 
-		if (!request.session)
-			fastify.log.error('No session found on /submit/:provider request')
+		// if (!request.session)
+		// 	fastify.log.error('No session found on /submit/:provider request')
 
-		// Save session and wait for it to complete before redirecting
-		try {
-			await new Promise<void>((resolve, reject) => {
-				request.session.save((err) => {
-					if (err) {
-						fastify.log.error({ err }, 'Failed to save session before OAuth redirect')
-						reject(err)
-					} else {
-						fastify.log.info({ sessionId: request.session.sessionId }, 'Session saved before OAuth redirect')
-						resolve()
-					}
-				})
-			})
-			return reply.redirect(`/connect/${provider}`)
-		} catch (err) {
-			return reply.redirect('/', 500)
-		}
+		// // Save session and wait for it to complete before redirecting
+		// try {
+		// 	await new Promise<void>((resolve, reject) => {
+		// 		request.session.save((err) => {
+		// 			if (err) {
+		// 				fastify.log.error({ err }, 'Failed to save session before OAuth redirect')
+		// 				reject(err)
+		// 			} else {
+		// 				fastify.log.info({ sessionId: request.session.sessionId }, 'Session saved before OAuth redirect')
+		// 				resolve()
+		// 			}
+		// 		})
+		// 	})
+		// 	return reply.redirect(`/connect/${provider}`)
+		// } catch (err) {
+		// 	return reply.redirect('/', 500)
+		// }
+
+		return reply.redirect(`/connect/${provider}`)
 
 
 	})
