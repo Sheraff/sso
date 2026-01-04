@@ -66,6 +66,34 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		store: createLRUCache<string, Session>(20),
 	})
 
+	////////////////////////////////////////////////////////////////////////////////////
+	////////////////////////////////////////////////////////////////////////////////////
+	////////////////////////////////////////////////////////////////////////////////////
+	////////////////////////////////////////////////////////////////////////////////////
+	/**
+	 * For some fucking reason, the session is not initialized before Grant tries to use it,
+	 * and it's not saved after Grant modifies it, so we have to do it manually here.
+	 * 
+	 * I would like to shit in the mouth of all those involved.
+	 */
+	fastify.addHook('onRoute', (routeOptions) => {
+		if (routeOptions.url === '/connect/:provider') {
+			routeOptions.preHandler = (request, reply, next) => {
+				if (request.session) request.session.save(() => next())
+				else next()
+			}
+		} else if (routeOptions.url === '/connect/:provider/callback') {
+			routeOptions.onSend = (request, reply, payload, done) => {
+				if (request.session) request.session.save(() => done(null, payload))
+				else done(null, payload)
+			}
+		}
+	})
+	////////////////////////////////////////////////////////////////////////////////////
+	////////////////////////////////////////////////////////////////////////////////////
+	////////////////////////////////////////////////////////////////////////////////////
+	////////////////////////////////////////////////////////////////////////////////////
+
 	// Register Grant middleware
 	void fastify.register(
 		grant.default.fastify({
@@ -79,41 +107,6 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			...grantOptions,
 		})
 	)
-
-	////////////////////////////////////////////////////////////////////////////////////
-	////////////////////////////////////////////////////////////////////////////////////
-	////////////////////////////////////////////////////////////////////////////////////
-	////////////////////////////////////////////////////////////////////////////////////
-	/**
-	 * For some fucking reason, the session is not initialized before Grant tries to use it,
-	 * and it's not saved after Grant modifies it, so we have to do it manually here.
-	 * 
-	 * I would like to shit in the mouth of all those involved.
-	 */
-	fastify.addHook('preHandler', async (request, reply) => {
-		if (request.url.startsWith('/connect/')) {
-			// Initialize session if not already done, forcing it to be created and saved
-			if (request.session) {
-				await new Promise((resolve) => {
-					request.session.save(resolve)
-				})
-			}
-		}
-	})
-	fastify.addHook('onSend', async (request, reply) => {
-		if (request.url.startsWith('/connect/')) {
-			// Grant is about to redirect - ensure session is saved first
-			if (request.session) {
-				await new Promise((resolve) => {
-					request.session.save(resolve)
-				})
-			}
-		}
-	})
-	////////////////////////////////////////////////////////////////////////////////////
-	////////////////////////////////////////////////////////////////////////////////////
-	////////////////////////////////////////////////////////////////////////////////////
-	////////////////////////////////////////////////////////////////////////////////////
 
 	// / - Root page - sets redirect cookies
 	fastify.get<{ Querystring: { host?: string, path?: string, error?: string } }>('/', function (request, reply) {
@@ -223,27 +216,6 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			}
 		}
 
-		// if (!request.session)
-		// 	fastify.log.error('No session found on /submit/:provider request')
-
-		// // Save session and wait for it to complete before redirecting
-		// try {
-		// 	await new Promise<void>((resolve, reject) => {
-		// 		request.session.save((err) => {
-		// 			if (err) {
-		// 				fastify.log.error({ err }, 'Failed to save session before OAuth redirect')
-		// 				reject(err)
-		// 			} else {
-		// 				fastify.log.info({ sessionId: request.session.sessionId }, 'Session saved before OAuth redirect')
-		// 				resolve()
-		// 			}
-		// 		})
-		// 	})
-		// 	return reply.redirect(`/connect/${provider}`)
-		// } catch (err) {
-		// 	return reply.redirect('/', 500)
-		// }
-
 		return reply.redirect(`/connect/${provider}`)
 
 
@@ -255,15 +227,13 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		const grantSession = request.session.grant
 
 		if (!grantSession) {
-			fastify.log.error('OAuth callback missing grant session')
 			return reply.status(400).send({ error: 'Invalid OAuth callback' })
 		}
 
 		// Extract user data from OAuth response
 		const grantData = getGrantData(grantSession)
 		if (!grantData) {
-			fastify.log.error({ provider: grantSession.provider, response: grantSession.response }, 'Failed to extract grant data')
-			return reply.status(400).send({ error: 'Invalid OAuth response' })
+			return reply.status(400).send({ error: `Invalid OAuth response from ${grantSession.provider}` })
 		}
 
 		// Create session for existing user
