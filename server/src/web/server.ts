@@ -64,7 +64,8 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			path: '/',
 			maxAge: 600000 // 10 minutes - only for OAuth flow
 		},
-		saveUninitialized: true, // Ensure session is saved even if not modified
+		saveUninitialized: false, // Don't save empty sessions
+		rolling: false,
 		logLevel: "trace",
 		store: createLRUCache(20),
 	})
@@ -219,13 +220,25 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		if (!request.session)
 			fastify.log.error('No session found on /submit/:provider request')
 
-		// Ensure session is saved before redirecting to Grant
-		if (!request.session.isSaved())
-			await new Promise(resolve => request.session.save(resolve))
-		else
-			fastify.log.trace('Session already saved before /submit/:provider redirect')
+		// Save session and wait for it to complete before redirecting
+		try {
+			await new Promise<void>((resolve, reject) => {
+				request.session.save((err) => {
+					if (err) {
+						fastify.log.error({ err }, 'Failed to save session before OAuth redirect')
+						reject(err)
+					} else {
+						fastify.log.info({ sessionId: request.session.sessionId }, 'Session saved before OAuth redirect')
+						resolve()
+					}
+				})
+			})
+			return reply.redirect(`/connect/${provider}`)
+		} catch (err) {
+			return reply.redirect('/', 500)
+		}
 
-		return reply.redirect(`/connect/${provider}`)
+
 	})
 
 	// /auth/callback - Our custom callback route - receives all OAuth responses
