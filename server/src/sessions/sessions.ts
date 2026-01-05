@@ -214,7 +214,7 @@ const SessionDataSchema = pipe(
 			picklist(activeProviders)
 		),
 		/** Unix timestamp in milliseconds */
-		expiresAt: number(), // Unix timestamp
+		createdAt: number(), // Unix timestamp
 	})
 )
 

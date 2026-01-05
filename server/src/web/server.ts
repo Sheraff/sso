@@ -293,15 +293,11 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 
 		// User found - create session and redirect back to app
 
-		// Calculate session expiration (7 days from now)
-		const expiresAt = new Date()
-		expiresAt.setDate(expiresAt.getDate() + SESSION_VALIDITY_DAYS)
-
 		// Encrypt session data for cookie
 		const encryptedCookie = sessionManager.encryptSessionData({
 			sessionId,
 			provider: grantData.provider as Provider,
-			expiresAt: expiresAt.getTime(),
+			createdAt: Date.now(),
 		})
 
 		// Set session cookie for all subdomains

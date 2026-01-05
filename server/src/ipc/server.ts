@@ -5,6 +5,7 @@ import type { SessionManager } from "../sessions/sessions.ts"
 import type { InvitationManager } from "../invitations/invitations.ts"
 import { logger } from '../logger.ts'
 import { number, object, optional, safeParse, string } from "valibot"
+import { SESSION_VALIDITY_DAYS } from "../sessions/constants.ts"
 
 const SERVER_ID: ServerID = 'world'
 
@@ -80,12 +81,12 @@ function registerCheckAuthHandler(sessionManager: SessionManager) {
 				return
 			}
 
-			const { sessionId, provider, expiresAt } = decryptResult.success
+			const { sessionId, provider, createdAt } = decryptResult.success
 
 			// Check if session has expired (7-day validity)
-			const now = new Date()
-			const expirationDate = new Date(expiresAt)
-			if (now > expirationDate) {
+			const now = Date.now()
+			const age = now - createdAt
+			if (age > SESSION_VALIDITY_DAYS * 24 * 60 * 60 * 1000) {
 				// Session expired - redirect to transparent re-auth
 				ipc.server.emit(socket, 'checkAuth', {
 					id,
