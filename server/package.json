@@ -23,7 +23,6 @@
 		"grant": "^5.4.24",
 		"node-ipc": "^12.0.0",
 		"pino": "^10.1.0",
-		"tx2": "^1.0.5",
 		"valibot": "^1.2.0"
 	},
 	"devDependencies": {
@@ -31,7 +30,6 @@
 		"@total-typescript/ts-reset": "^0.6.1",
 		"@types/better-sqlite3": "^7.6.13",
 		"@types/node": "^25.0.3",
-		"@types/tx2": "^1.0.3",
 		"typescript": "^5.9.3"
 	}
 }
