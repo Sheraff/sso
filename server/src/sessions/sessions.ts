@@ -1,6 +1,9 @@
 import type Database from "better-sqlite3"
 import { decrypt, encrypt } from "./encryption.ts"
+import { SESSION_COOKIE_MAX_AGE_DAYS } from "./constants.ts"
 import crypto from "node:crypto"
+import { object, type InferOutput, safeParse, string, pipe, parseJson, picklist, number } from "valibot"
+import { activeProviders } from "../providers/index.ts"
 
 /**
  * Creates a session manager with prepared statements for efficient database operations.
@@ -27,17 +30,10 @@ export function createSessionManager(db: Database.Database) {
 		AND sessions.expires_at > datetime('now')
 	`)
 
-	// Prepared statement for refreshing session expiry (idempotent)
-	const refreshSessionStmt = db.prepare<[session_id: string]>(`
-		UPDATE sessions 
-		SET expires_at = datetime('now', '+50 days')
-		WHERE id = ?
-	`)
-
 	// Prepared statement for creating a new session
-	const createSessionStmt = db.prepare<[id: string, user_id: string, session: string, account_id: string]>(`
-		INSERT INTO sessions (id, user_id, session, expires_at, account_id)
-		VALUES (?, ?, ?, datetime('now', '+50 days'), ?)
+	const createSessionStmt = db.prepare<[id: string, user_id: string, account_id: string]>(`
+		INSERT INTO sessions (id, user_id, expires_at, account_id)
+		VALUES (?, ?, datetime('now', '+${SESSION_COOKIE_MAX_AGE_DAYS} days'), ?)
 	`)
 
 	// Prepared statement to lookup user by provider account
@@ -65,6 +61,13 @@ export function createSessionManager(db: Database.Database) {
 		VALUES (?, ?, ?, ?)
 	`)
 
+	// Prepared statement to invalidate old sessions for an account (except current one)
+	const invalidateSessionsForUserStmt = db.prepare<[user_id: string, except_session_id: string]>(`
+		DELETE FROM sessions
+		WHERE user_id = ?
+		AND id != ?
+	`)
+
 	let timeoutId: NodeJS.Timeout | null = null
 	function scheduleCleanup() {
 		if (timeoutId) clearTimeout(timeoutId)
@@ -79,10 +82,10 @@ export function createSessionManager(db: Database.Database) {
 		scheduleCleanup()
 
 		const sessionId = crypto.randomUUID()
-		const sessionData = JSON.stringify({
-			createdAt: new Date().toISOString()
-		})
-		createSessionStmt.run(sessionId, userId, sessionData, accountId)
+		createSessionStmt.run(sessionId, userId, accountId)
+
+		// Invalidate old sessions for this user to prevent session fixation
+		invalidateSessionsForUserStmt.run(userId, sessionId)
 
 		return sessionId
 	}
@@ -100,34 +103,46 @@ export function createSessionManager(db: Database.Database) {
 			return getSessionStmt.get(sessionId) ?? null
 		},
 
-		/**
-		 * Refreshes a session's expiry time to 50 days from now.
-		 * This operation is idempotent and safe for concurrent calls.
-		 * 
-		 * @param sessionId - The session ID to refresh
-		 */
-		refreshSession(sessionId: string): void {
-			refreshSessionStmt.run(sessionId)
+		decryptSessionCookie(cipherText: string) {
+			return decrypt(cipherText)
 		},
 
 		/**
-		 * Encrypts a session ID for use in cookies.
-		 * Each encryption produces a unique ciphertext due to random salt/IV.
-		 * 
-		 * @param sessionId - The session ID to encrypt
-		 * @returns Encrypted session cookie value
+		 * Encrypt session data object into a string
 		 */
-		encryptSessionCookie(sessionId: string): string {
-			return encrypt(sessionId)
+		encryptSessionData(data: SessionData): string {
+			return encrypt(JSON.stringify(data))
 		},
 
-		decryptSessionCookie(cookieValue: string) {
-			return decrypt(cookieValue)
+		/**
+		 * Decrypt and validate session data from encrypted string
+		 */
+		decryptSessionData(
+			cookieValue: string,
+		): { success: SessionData } | { error: Error } {
+			const decryptResult = this.decryptSessionCookie(cookieValue)
+
+			if ("error" in decryptResult) {
+				return decryptResult
+			}
+
+			const validated = safeParse(SessionDataSchema, decryptResult.success)
+
+			if (!validated.success) {
+				return {
+					error: new Error("Invalid session data structure", {
+						cause: validated.issues,
+					}),
+				}
+			}
+
+			return { success: validated.output }
 		},
 
 		/**
 		 * Creates a new session for a user identified by provider credentials.
 		 * Looks up the user by provider and provider_user_id, then creates a session.
+		 * Invalidates old sessions for the same account to prevent session fixation.
 		 * 
 		 * @param provider - OAuth provider name (e.g., "github", "google")
 		 * @param providerUserId - User ID from the OAuth provider
@@ -184,3 +199,23 @@ export function createSessionManager(db: Database.Database) {
 }
 
 export type SessionManager = ReturnType<typeof createSessionManager>
+
+
+/**
+ * Session data structure stored in encrypted cookie
+ */
+const SessionDataSchema = pipe(
+	string(),
+	parseJson(),
+	object({
+		sessionId: string(),
+		provider: pipe(
+			string(),
+			picklist(activeProviders)
+		),
+		/** Unix timestamp in milliseconds */
+		createdAt: number(), // Unix timestamp
+	})
+)
+
+type SessionData = InferOutput<typeof SessionDataSchema>

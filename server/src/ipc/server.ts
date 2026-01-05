@@ -5,17 +5,21 @@ import type { SessionManager } from "../sessions/sessions.ts"
 import type { InvitationManager } from "../invitations/invitations.ts"
 import { logger } from '../logger.ts'
 import { number, object, optional, safeParse, string } from "valibot"
+import { SESSION_VALIDITY_DAYS } from "../sessions/constants.ts"
 
 const SERVER_ID: ServerID = 'world'
 
 
 // Helper to build redirect URL
-const buildRedirect = (targetHost: string, targetPath?: string): string => {
-	const validHost = validateRedirectHost(targetHost) ? targetHost : domain
+const buildRedirect = (pathname: string, targetHost?: string, targetPath?: string): string => {
 	const url = new URL(ORIGIN)
-	url.searchParams.set('host', validHost)
-	if (targetPath) {
-		url.searchParams.set('path', targetPath)
+	url.pathname = pathname
+	if (targetHost) {
+		const validHost = validateRedirectHost(targetHost) ? targetHost : domain
+		url.searchParams.set('host', validHost)
+		if (targetPath) {
+			url.searchParams.set('path', targetPath)
+		}
 	}
 	return url.toString()
 }
@@ -40,7 +44,7 @@ function registerCheckAuthHandler(sessionManager: SessionManager) {
 					id: data.id,
 					message: {
 						authenticated: false,
-						redirect: buildRedirect(''),
+						redirect: buildRedirect('/'),
 					}
 				} satisfies AuthCheck.Result)
 				return
@@ -53,58 +57,67 @@ function registerCheckAuthHandler(sessionManager: SessionManager) {
 					id,
 					message: {
 						authenticated: false,
-						redirect: buildRedirect(host, path),
+						redirect: buildRedirect('/', host, path),
 					}
 				} satisfies AuthCheck.Result)
 				return
 			}
 
-			// Decrypt session cookie
-			const decryptResult = sessionManager.decryptSessionCookie(sessionCookie)
+			// Decrypt and validate session cookie data
+			const decryptResult = sessionManager.decryptSessionData(sessionCookie)
 			if ('error' in decryptResult) {
-				// Log potential tampering attempt
+				// Log potential tampering or invalid structure
 				logger.warn({
 					error: decryptResult.error.message,
 					host,
-				}, '[SECURITY] Cookie decryption failed')
+				}, '[SECURITY] Cookie decryption or validation failed')
 				ipc.server.emit(socket, 'checkAuth', {
 					id,
 					message: {
 						authenticated: false,
-						redirect: buildRedirect(host, path),
+						redirect: buildRedirect('/', host, path),
 					}
 				} satisfies AuthCheck.Result)
 				return
 			}
 
-			const sessionId = decryptResult.success
+			const { sessionId, provider, createdAt } = decryptResult.success
 
-			// Get session with user data
+			// Check if session has expired (7-day validity)
+			const now = Date.now()
+			const age = now - createdAt
+			if (age > SESSION_VALIDITY_DAYS * 24 * 60 * 60 * 1000) {
+				// Session expired - redirect to transparent re-auth
+				ipc.server.emit(socket, 'checkAuth', {
+					id,
+					message: {
+						authenticated: false,
+						redirect: buildRedirect(`/submit/${provider}`, host, path),
+					}
+				} satisfies AuthCheck.Result)
+				return
+			}
+
+			// Get session with user data from database
 			const session = sessionManager.getSessionWithUser(sessionId)
 			if (!session) {
+				// Session not in database (deleted or never existed)
 				ipc.server.emit(socket, 'checkAuth', {
 					id,
 					message: {
 						authenticated: false,
-						redirect: buildRedirect(host, path),
+						redirect: buildRedirect('/', host, path),
 					}
 				} satisfies AuthCheck.Result)
 				return
 			}
 
-			// Refresh session (extends expiry by 50 days)
-			sessionManager.refreshSession(sessionId)
-
-			// Generate new encrypted cookie
-			const newCookie = sessionManager.encryptSessionCookie(sessionId)
-
-			// Return authenticated result
+			// Session valid - return authenticated result
 			ipc.server.emit(socket, 'checkAuth', {
 				id,
 				message: {
 					authenticated: true,
 					user_id: session.user_id,
-					cookie: newCookie,
 				}
 			} satisfies AuthCheck.Result)
 		}
