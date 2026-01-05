@@ -10,12 +10,15 @@ const SERVER_ID: ServerID = 'world'
 
 
 // Helper to build redirect URL
-const buildRedirect = (targetHost: string, targetPath?: string): string => {
-	const validHost = validateRedirectHost(targetHost) ? targetHost : domain
+const buildRedirect = (pathname: string, targetHost?: string, targetPath?: string): string => {
 	const url = new URL(ORIGIN)
-	url.searchParams.set('host', validHost)
-	if (targetPath) {
-		url.searchParams.set('path', targetPath)
+	url.pathname = pathname
+	if (targetHost) {
+		const validHost = validateRedirectHost(targetHost) ? targetHost : domain
+		url.searchParams.set('host', validHost)
+		if (targetPath) {
+			url.searchParams.set('path', targetPath)
+		}
 	}
 	return url.toString()
 }
@@ -40,7 +43,7 @@ function registerCheckAuthHandler(sessionManager: SessionManager) {
 					id: data.id,
 					message: {
 						authenticated: false,
-						redirect: buildRedirect(''),
+						redirect: buildRedirect('/'),
 					}
 				} satisfies AuthCheck.Result)
 				return
@@ -53,7 +56,7 @@ function registerCheckAuthHandler(sessionManager: SessionManager) {
 					id,
 					message: {
 						authenticated: false,
-						redirect: buildRedirect(host, path),
+						redirect: buildRedirect('/', host, path),
 					}
 				} satisfies AuthCheck.Result)
 				return
@@ -71,7 +74,7 @@ function registerCheckAuthHandler(sessionManager: SessionManager) {
 					id,
 					message: {
 						authenticated: false,
-						redirect: buildRedirect(host, path),
+						redirect: buildRedirect('/', host, path),
 					}
 				} satisfies AuthCheck.Result)
 				return
@@ -84,16 +87,11 @@ function registerCheckAuthHandler(sessionManager: SessionManager) {
 			const expirationDate = new Date(expiresAt)
 			if (now > expirationDate) {
 				// Session expired - redirect to transparent re-auth
-				logger.info({
-					sessionId,
-					provider,
-					expiresAt,
-				}, 'Session expired, redirecting to transparent re-auth')
 				ipc.server.emit(socket, 'checkAuth', {
 					id,
 					message: {
 						authenticated: false,
-						redirect: `/submit/${provider}`,
+						redirect: buildRedirect(`/submit/${provider}`, host, path),
 					}
 				} satisfies AuthCheck.Result)
 				return
@@ -107,7 +105,7 @@ function registerCheckAuthHandler(sessionManager: SessionManager) {
 					id,
 					message: {
 						authenticated: false,
-						redirect: buildRedirect(host, path),
+						redirect: buildRedirect('/', host, path),
 					}
 				} satisfies AuthCheck.Result)
 				return
