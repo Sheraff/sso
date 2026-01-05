@@ -61,6 +61,13 @@ export function createSessionManager(db: Database.Database) {
 		VALUES (?, ?, ?, ?)
 	`)
 
+	// Prepared statement to invalidate old sessions for an account (except current one)
+	const invalidateSessionsForUserStmt = db.prepare<[user_id: string, except_session_id: string]>(`
+		DELETE FROM sessions
+		WHERE user_id = ?
+		AND id != ?
+	`)
+
 	let timeoutId: NodeJS.Timeout | null = null
 	function scheduleCleanup() {
 		if (timeoutId) clearTimeout(timeoutId)
@@ -79,6 +86,9 @@ export function createSessionManager(db: Database.Database) {
 			createdAt: new Date().toISOString()
 		})
 		createSessionStmt.run(sessionId, userId, sessionData, accountId)
+
+		// Invalidate old sessions for this user to prevent session fixation
+		invalidateSessionsForUserStmt.run(userId, sessionId)
 
 		return sessionId
 	}
@@ -135,6 +145,7 @@ export function createSessionManager(db: Database.Database) {
 		/**
 		 * Creates a new session for a user identified by provider credentials.
 		 * Looks up the user by provider and provider_user_id, then creates a session.
+		 * Invalidates old sessions for the same account to prevent session fixation.
 		 * 
 		 * @param provider - OAuth provider name (e.g., "github", "google")
 		 * @param providerUserId - User ID from the OAuth provider
