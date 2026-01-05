@@ -3,7 +3,7 @@ import cookie from '@fastify/cookie'
 import session from '@fastify/session'
 import grant from "grant"
 import { readFileSync } from 'node:fs'
-import { grantOptions, getGrantData, type RawGrant, providerMetas, activeProviders } from "../providers/index.ts"
+import { grantOptions, getGrantData, type RawGrant, providerMetas, activeProviders, type Provider } from "../providers/index.ts"
 import { domain, hostname, ORIGIN, validateRedirectHost } from "../domain.ts"
 import type { CookieName } from "@sso/client"
 import { type SessionManager } from "../sessions/sessions.ts"
@@ -300,8 +300,8 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		// Encrypt session data for cookie
 		const encryptedCookie = sessionManager.encryptSessionData({
 			sessionId,
-			provider: grantData.provider,
-			expiresAt: expiresAt.toISOString(),
+			provider: grantData.provider as Provider,
+			expiresAt: expiresAt.getTime(),
 		})
 
 		// Set session cookie for all subdomains

@@ -2,7 +2,7 @@ import type Database from "better-sqlite3"
 import { decrypt, encrypt } from "./encryption.ts"
 import { SESSION_COOKIE_MAX_AGE_DAYS } from "./constants.ts"
 import crypto from "node:crypto"
-import { object, type InferOutput, safeParse, string, pipe, parseJson, picklist } from "valibot"
+import { object, type InferOutput, safeParse, string, pipe, parseJson, picklist, number } from "valibot"
 import { activeProviders } from "../providers/index.ts"
 
 /**
@@ -205,7 +205,8 @@ const SessionDataSchema = pipe(
 			string(),
 			picklist(activeProviders)
 		),
-		expiresAt: string(), // ISO date string
+		/** Unix timestamp in milliseconds */
+		expiresAt: number(), // Unix timestamp
 	})
 )
 

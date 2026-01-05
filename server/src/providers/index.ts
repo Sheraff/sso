@@ -62,4 +62,6 @@ export const providerMetas = {
 	github: Github.meta,
 }
 
-export const activeProviders = Object.entries(grantOptions).filter(([, options]) => options !== undefined).map(([key]) => key)
+export type Provider = keyof typeof grantOptions
+
+export const activeProviders = Object.entries(grantOptions).filter(([, options]) => options !== undefined).map(([key]) => key) as readonly Provider[]

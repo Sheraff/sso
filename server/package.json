@@ -27,6 +27,7 @@
 	},
 	"devDependencies": {
 		"@sso/client": "workspace:*",
+		"@total-typescript/ts-reset": "^0.6.1",
 		"@types/better-sqlite3": "^7.6.13",
 		"@types/node": "^25.0.3",
 		"typescript": "^5.9.3"
