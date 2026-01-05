@@ -1,5 +1,4 @@
 import ipc from 'node-ipc'
-import tx2 from 'tx2'
 import type { AuthCheck, InvitationCode, ServerID } from "@sso/client"
 import { domain, ORIGIN, validateRedirectHost } from "../domain.ts"
 import type { SessionManager } from "../sessions/sessions.ts"
@@ -130,10 +129,6 @@ const InvitationCodeSchema = object({
 })
 
 function registerInvitationCodeHandler(invitationManager: InvitationManager) {
-	tx2.action('invite', (reply) => {
-		const code = invitationManager.generateInvitationCode()
-		reply({ answer: code })
-	})
 	ipc.server.on(
 		'getInvitationCode',
 		(data: InvitationCode.Request, socket) => {
