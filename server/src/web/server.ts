@@ -4,13 +4,13 @@ import session from '@fastify/session'
 import grant from "grant"
 import { readFileSync } from 'node:fs'
 import { grantOptions, getGrantData, type RawGrant, providerMetas, activeProviders, type Provider } from "../providers/index.ts"
-import { domain, hostname, ORIGIN, validateRedirectHost } from "../domain.ts"
+import { domain, ORIGIN, validateRedirectHost } from "../domain.ts"
 import type { CookieName } from "@sso/client"
 import { type SessionManager } from "../sessions/sessions.ts"
 import type { InvitationManager } from "../invitations/invitations.ts"
 import { logger } from '../logger.ts'
 import { createLRUCache } from "../lru-cache.ts"
-import { SESSION_COOKIE_MAX_AGE_DAYS, SESSION_VALIDITY_DAYS } from '../sessions/constants.ts'
+import { SESSION_COOKIE_MAX_AGE_DAYS } from '../sessions/constants.ts'
 
 // Extend Fastify session types
 declare module '@fastify/session' {
