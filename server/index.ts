@@ -26,3 +26,5 @@ process.on("SIGINT", async () => {
 	console.log("Server shut down, exiting.")
 	process.exit(0)
 })
+
+process.send?.('ready')
