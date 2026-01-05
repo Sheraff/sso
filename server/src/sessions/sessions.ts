@@ -31,9 +31,9 @@ export function createSessionManager(db: Database.Database) {
 	`)
 
 	// Prepared statement for creating a new session
-	const createSessionStmt = db.prepare<[id: string, user_id: string, session: string, account_id: string]>(`
-		INSERT INTO sessions (id, user_id, session, expires_at, account_id)
-		VALUES (?, ?, ?, datetime('now', '+${SESSION_COOKIE_MAX_AGE_DAYS} days'), ?)
+	const createSessionStmt = db.prepare<[id: string, user_id: string, account_id: string]>(`
+		INSERT INTO sessions (id, user_id, expires_at, account_id)
+		VALUES (?, ?, datetime('now', '+${SESSION_COOKIE_MAX_AGE_DAYS} days'), ?)
 	`)
 
 	// Prepared statement to lookup user by provider account
@@ -82,10 +82,7 @@ export function createSessionManager(db: Database.Database) {
 		scheduleCleanup()
 
 		const sessionId = crypto.randomUUID()
-		const sessionData = JSON.stringify({
-			createdAt: new Date().toISOString()
-		})
-		createSessionStmt.run(sessionId, userId, sessionData, accountId)
+		createSessionStmt.run(sessionId, userId, accountId)
 
 		// Invalidate old sessions for this user to prevent session fixation
 		invalidateSessionsForUserStmt.run(userId, sessionId)

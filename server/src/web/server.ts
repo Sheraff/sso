@@ -120,7 +120,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 
 		// Inject provider buttons
 		const providerButtons = activeProviders.map((key) => {
-			const meta = providerMetas[key as keyof typeof providerMetas]
+			const meta = providerMetas[key]
 			const isLastUsed = key === lastProvider
 			const label = isLastUsed ? `${meta.name} (Last used)` : meta.name
 			const className = isLastUsed ? 'provider-btn last-used' : 'provider-btn'
@@ -253,9 +253,9 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 				let previousSessionId: string | undefined
 				const sessionCookie = request.cookies[COOKIE_NAME]
 				if (sessionCookie) {
-					const result = sessionManager.decryptSessionCookie(sessionCookie)
+					const result = sessionManager.decryptSessionData(sessionCookie)
 					if ('success' in result) {
-						previousSessionId = result.success
+						previousSessionId = result.success.sessionId
 					}
 				}
 
