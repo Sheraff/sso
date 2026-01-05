@@ -146,7 +146,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		const { provider } = request.params
 
 		if (!(provider in grantOptions) || !grantOptions[provider as keyof typeof grantOptions]) {
-			return reply.redirect('/', 304)
+			return reply.redirect(makeRootPath(request.query.host, request.query.path), 304)
 		}
 
 		const inviteCode = request.query.inviteCode?.trim()
@@ -156,7 +156,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 
 		if (inviteCode && !invited) {
 			// Invalid or expired code - redirect back to root
-			return reply.redirect('/')
+			return reply.redirect(makeRootPath(request.query.host, request.query.path))
 		}
 
 		if (inviteCode) {
@@ -346,4 +346,15 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 	})
 
 	return fastify
+}
+
+function makeRootPath(host?: string, path?: string): string {
+	const url = new URL('http://example.com') // Dummy base
+	if (host) {
+		url.searchParams.set('host', host)
+	}
+	if (path) {
+		url.searchParams.set('path', path)
+	}
+	return url.pathname + url.search
 }
