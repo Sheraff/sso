@@ -13,34 +13,36 @@ export function createSessionManager(db: Database.Database) {
 		user_id: string
 		session_id: string
 		expires_at: string
+		account_id: string
 	}
 	// Prepared statement for retrieving valid session with user data
-	const getSessionStmt = db.prepare<[string], SessionRow>(`
+	const getSessionStmt = db.prepare<[session_id: string], SessionRow>(`
 		SELECT 
 			sessions.user_id,
 			sessions.id as session_id,
-			sessions.expires_at
+			sessions.expires_at,
+			sessions.account_id
 		FROM sessions
 		WHERE sessions.id = ?
 		AND sessions.expires_at > datetime('now')
 	`)
 
 	// Prepared statement for refreshing session expiry (idempotent)
-	const refreshSessionStmt = db.prepare<[string]>(`
+	const refreshSessionStmt = db.prepare<[session_id: string]>(`
 		UPDATE sessions 
 		SET expires_at = datetime('now', '+50 days')
 		WHERE id = ?
 	`)
 
 	// Prepared statement for creating a new session
-	const createSessionStmt = db.prepare<[string, string, string]>(`
-		INSERT INTO sessions (id, user_id, session, expires_at)
-		VALUES (?, ?, ?, datetime('now', '+50 days'))
+	const createSessionStmt = db.prepare<[id: string, user_id: string, session: string, account_id: string]>(`
+		INSERT INTO sessions (id, user_id, session, expires_at, account_id)
+		VALUES (?, ?, ?, datetime('now', '+50 days'), ?)
 	`)
 
 	// Prepared statement to lookup user by provider account
-	const getUserByProviderStmt = db.prepare<[string, string], { user_id: string }>(`
-		SELECT user_id
+	const getUserAccountByProviderStmt = db.prepare<[provider: string, provider_user_id: string], { user_id: string, id: string }>(`
+		SELECT user_id, id
 		FROM accounts
 		WHERE provider = ? AND provider_user_id = ?
 	`)
@@ -52,13 +54,13 @@ export function createSessionManager(db: Database.Database) {
 	`)
 
 	// Prepared statement to create a new user
-	const createUserStmt = db.prepare<[string, string]>(`
+	const createUserStmt = db.prepare<[id: string, email: string]>(`
 		INSERT INTO users (id, email)
 		VALUES (?, ?)
 	`)
 
 	// Prepared statement to create a new account
-	const createAccountStmt = db.prepare<[string, string, string, string]>(`
+	const createAccountStmt = db.prepare<[id: string, user_id: string, provider: string, provider_user_id: string]>(`
 		INSERT INTO accounts (id, user_id, provider, provider_user_id)
 		VALUES (?, ?, ?, ?)
 	`)
@@ -73,14 +75,14 @@ export function createSessionManager(db: Database.Database) {
 		}, 30_000).unref()
 	}
 
-	function createSession(userId: string): string {
+	function createSession(userId: string, accountId: string): string {
 		scheduleCleanup()
 
 		const sessionId = crypto.randomUUID()
 		const sessionData = JSON.stringify({
 			createdAt: new Date().toISOString()
 		})
-		createSessionStmt.run(sessionId, userId, sessionData)
+		createSessionStmt.run(sessionId, userId, sessionData, accountId)
 
 		return sessionId
 	}
@@ -133,9 +135,9 @@ export function createSessionManager(db: Database.Database) {
 		 */
 		createSessionForProvider(provider: string, providerUserId: string): string | null {
 			// Look up user by provider account
-			const userRow = getUserByProviderStmt.get(provider, providerUserId)
+			const userRow = getUserAccountByProviderStmt.get(provider, providerUserId)
 			if (!userRow) return null
-			return createSession(userRow.user_id)
+			return createSession(userRow.user_id, userRow.id)
 		},
 
 		/**
@@ -176,7 +178,7 @@ export function createSessionManager(db: Database.Database) {
 				createAccountStmt.run(accountId, userId, provider, providerUserId)
 			}
 
-			return createSession(userId)
+			return createSession(userId, accountId)
 		},
 	}
 }
