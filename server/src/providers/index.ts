@@ -61,3 +61,5 @@ export const providerMetas = {
 	discord: Discord.meta,
 	github: Github.meta,
 }
+
+export const activeProviders = Object.entries(grantOptions).filter(([, options]) => options !== undefined).map(([key]) => key)

@@ -3,13 +3,14 @@ import cookie from '@fastify/cookie'
 import session from '@fastify/session'
 import grant from "grant"
 import { readFileSync } from 'node:fs'
-import { grantOptions, getGrantData, type RawGrant, providerMetas } from "../providers/index.ts"
+import { grantOptions, getGrantData, type RawGrant, providerMetas, activeProviders } from "../providers/index.ts"
 import { domain, hostname, ORIGIN, validateRedirectHost } from "../domain.ts"
 import type { CookieName } from "@sso/client"
 import { type SessionManager } from "../sessions/sessions.ts"
 import type { InvitationManager } from "../invitations/invitations.ts"
 import { logger } from '../logger.ts'
 import { createLRUCache } from "../lru-cache.ts"
+import { SESSION_COOKIE_MAX_AGE_DAYS, SESSION_VALIDITY_DAYS } from '../sessions/constants.ts'
 
 // Extend Fastify session types
 declare module '@fastify/session' {
@@ -104,13 +105,21 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			}, 'OAuth error redirected to root')
 		}
 
-		const providers = Object.entries(grantOptions).filter((p) => p[1])
-		const lastProvider = request.cookies.last_provider
+		let lastProvider: string | undefined
+
+		// Try to get last provider from session cookie
+		const sessionCookie = request.cookies[COOKIE_NAME]
+		if (sessionCookie) {
+			const result = sessionManager.decryptSessionData(sessionCookie)
+			if ('success' in result) {
+				lastProvider = result.success.provider
+			}
+		}
 
 		let html = readFileSync(new URL('./signin.html', import.meta.url), 'utf-8')
 
 		// Inject provider buttons
-		const providerButtons = providers.map(([key]) => {
+		const providerButtons = activeProviders.map((key) => {
 			const meta = providerMetas[key as keyof typeof providerMetas]
 			const isLastUsed = key === lastProvider
 			const label = isLastUsed ? `${meta.name} (Last used)` : meta.name
@@ -145,7 +154,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 	fastify.get<{ Querystring: { inviteCode?: string, host?: string, path?: string }, Params: { provider: string } }>('/submit/:provider', async function (request, reply) {
 		const { provider } = request.params
 
-		if (!(provider in grantOptions) || !grantOptions[provider as keyof typeof grantOptions]) {
+		if (!activeProviders.includes(provider)) {
 			return reply.redirect(makeRootPath(request.query.host, request.query.path), 304)
 		}
 
@@ -284,8 +293,16 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 
 		// User found - create session and redirect back to app
 
-		// Encrypt session ID for cookie
-		const encryptedCookie = sessionManager.encryptSessionCookie(sessionId)
+		// Calculate session expiration (7 days from now)
+		const expiresAt = new Date()
+		expiresAt.setDate(expiresAt.getDate() + SESSION_VALIDITY_DAYS)
+
+		// Encrypt session data for cookie
+		const encryptedCookie = sessionManager.encryptSessionData({
+			sessionId,
+			provider: grantData.provider,
+			expiresAt: expiresAt.toISOString(),
+		})
 
 		// Set session cookie for all subdomains
 		reply.setCookie(COOKIE_NAME, encryptedCookie, {
@@ -293,7 +310,7 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 			secure: domain !== 'localhost', // HTTPS only in production
 			domain: domain === 'localhost' ? undefined : `.${domain}`, // Share across *.example.com
 			sameSite: 'lax', // CSRF protection
-			maxAge: 50 * 24 * 60 * 60, // 50 days in seconds
+			maxAge: SESSION_COOKIE_MAX_AGE_DAYS * 24 * 60 * 60, // 90 days in seconds
 			path: '/'
 		})
 
@@ -304,16 +321,6 @@ export function webServer(sessionManager: SessionManager, invitationManager: Inv
 		})
 		reply.clearCookie('redirect_path', {
 			domain: domain === 'localhost' ? undefined : `.${domain}`,
-			path: '/'
-		})
-
-		// Remember which provider was last used
-		reply.setCookie('last_provider', grantData.provider, {
-			httpOnly: false, // Allow client-side access for UI updates
-			secure: domain !== 'localhost',
-			domain: hostname,
-			sameSite: 'lax',
-			maxAge: 365 * 24 * 60 * 60, // 1 year in seconds
 			path: '/'
 		})
 

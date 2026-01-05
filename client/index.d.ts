@@ -16,7 +16,6 @@ export namespace AuthCheck {
 		message: {
 			authenticated: true,
 			user_id: string,
-			cookie?: string
 		} | {
 			authenticated: false,
 			redirect: string

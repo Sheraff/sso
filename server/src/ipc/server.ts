@@ -59,14 +59,14 @@ function registerCheckAuthHandler(sessionManager: SessionManager) {
 				return
 			}
 
-			// Decrypt session cookie
-			const decryptResult = sessionManager.decryptSessionCookie(sessionCookie)
+			// Decrypt and validate session cookie data
+			const decryptResult = sessionManager.decryptSessionData(sessionCookie)
 			if ('error' in decryptResult) {
-				// Log potential tampering attempt
+				// Log potential tampering or invalid structure
 				logger.warn({
 					error: decryptResult.error.message,
 					host,
-				}, '[SECURITY] Cookie decryption failed')
+				}, '[SECURITY] Cookie decryption or validation failed')
 				ipc.server.emit(socket, 'checkAuth', {
 					id,
 					message: {
@@ -77,11 +77,32 @@ function registerCheckAuthHandler(sessionManager: SessionManager) {
 				return
 			}
 
-			const sessionId = decryptResult.success
+			const { sessionId, provider, expiresAt } = decryptResult.success
 
-			// Get session with user data
+			// Check if session has expired (7-day validity)
+			const now = new Date()
+			const expirationDate = new Date(expiresAt)
+			if (now > expirationDate) {
+				// Session expired - redirect to transparent re-auth
+				logger.info({
+					sessionId,
+					provider,
+					expiresAt,
+				}, 'Session expired, redirecting to transparent re-auth')
+				ipc.server.emit(socket, 'checkAuth', {
+					id,
+					message: {
+						authenticated: false,
+						redirect: `/submit/${provider}`,
+					}
+				} satisfies AuthCheck.Result)
+				return
+			}
+
+			// Get session with user data from database
 			const session = sessionManager.getSessionWithUser(sessionId)
 			if (!session) {
+				// Session not in database (deleted or never existed)
 				ipc.server.emit(socket, 'checkAuth', {
 					id,
 					message: {
@@ -92,19 +113,12 @@ function registerCheckAuthHandler(sessionManager: SessionManager) {
 				return
 			}
 
-			// Refresh session (extends expiry by 50 days)
-			sessionManager.refreshSession(sessionId)
-
-			// Generate new encrypted cookie
-			const newCookie = sessionManager.encryptSessionCookie(sessionId)
-
-			// Return authenticated result
+			// Session valid - return authenticated result
 			ipc.server.emit(socket, 'checkAuth', {
 				id,
 				message: {
 					authenticated: true,
 					user_id: session.user_id,
-					cookie: newCookie,
 				}
 			} satisfies AuthCheck.Result)
 		}
