@@ -48,16 +48,19 @@ export function createSsoClient(
 
 	let messageId = 0
 
+	/** @type {Map<string, Promise<import('./index.d.ts').AuthCheck.Result['message']>>} */
+	const checkAuthCache = new Map()
+
 	/** @type {import('./index.d.ts').SsoClient['checkAuth']} */
 	const checkAuth = (sessionCookie, host, path) => {
 		if (state === 'destroyed') throw new Error('SSO client is destroyed')
+		if (state !== 'connected') throw new Error('Not connected to SSO server')
+		const cached = checkAuthCache.get(sessionCookie ?? '')
+		if (cached) return cached
 		const id = messageId++
-		return new Promise((resolve, reject) => {
-			if (state !== 'connected') {
-				reject(new Error('Not connected to SSO server'))
-				return
-			}
 
+		/** @type {Promise<import('./index.d.ts').AuthCheck.Result['message']>} */
+		const promise = new Promise((resolve, reject) => {
 			// Set up timeout (1 second)
 			const timeout = setTimeout(() => {
 				cleanup()
@@ -72,11 +75,18 @@ export function createSsoClient(
 				if (data.id !== id) return
 				cleanup()
 				resolve(data.message)
+				if (sessionCookie && data.message.authenticated) {
+					checkAuthCache.set(sessionCookie, Promise.resolve(data.message))
+					setTimeout(() => {
+						checkAuthCache.delete(sessionCookie)
+					}, 5 * 60 * 1000).unref() // Cache for 5 minutes
+				}
 			}
 
 			const cleanup = () => {
 				clearTimeout(timeout)
 				ipc.of[SERVER_ID].off('checkAuth', responseHandler)
+				checkAuthCache.delete(sessionCookie ?? '')
 			}
 
 			// Register response handler
@@ -92,6 +102,8 @@ export function createSsoClient(
 				}
 			}))
 		})
+		checkAuthCache.set(sessionCookie ?? '', promise)
+		return promise
 	}
 
 	/** @type {import('./index.d.ts').SsoClient['disconnect']} */
