@@ -7,7 +7,7 @@
 	"scripts": {
 		"dev": "node --env-file=.env index.ts",
 		"start": "NODE_ENV=production node --env-file=.env index.ts",
-		"spawn": "pm2 start pnpm --time --name sso-server -- start",
+		"spawn": "pm2 start pnpm --name sso-server -- start",
 		"invite": "node --env-file=.env invite.ts",
 		"test": "echo \"Error: no test specified\" && exit 1"
 	},
