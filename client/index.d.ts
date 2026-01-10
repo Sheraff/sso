@@ -88,7 +88,7 @@ export type SsoClient = {
 	 * }
 	 * ```
 	 */
-	checkAuth: (sessionCookie: string | undefined, host: string, path: string) => Promise<AuthCheck.Result['message']>
+	checkAuth: (sessionCookie: string | undefined, host: string, path: string, signal?: AbortSignal) => Promise<AuthCheck.Result['message']>
 	/**
 	 * Disconnects from the SSO server and cleans up the IPC connection.
 	 * 

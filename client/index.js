@@ -52,7 +52,8 @@ export function createSsoClient(
 	const checkAuthCache = new Map()
 
 	/** @type {import('./index.d.ts').SsoClient['checkAuth']} */
-	const checkAuth = (sessionCookie, host, path) => {
+	const checkAuth = (sessionCookie, host, path, signal) => {
+		if (signal?.aborted) throw new Error('Request aborted')
 		if (state === 'destroyed') throw new Error('SSO client is destroyed')
 		if (state !== 'connected') throw new Error('Not connected to SSO server')
 		const cached = checkAuthCache.get(sessionCookie ?? '')
@@ -61,6 +62,12 @@ export function createSsoClient(
 
 		/** @type {Promise<import('./index.d.ts').AuthCheck.Result['message']>} */
 		const promise = new Promise((resolve, reject) => {
+			const onAbort = () => {
+				cleanup()
+				reject(new Error('Request aborted'))
+			}
+			signal?.addEventListener('abort', onAbort, { once: true })
+
 			// Set up timeout (1 second)
 			const timeout = setTimeout(() => {
 				cleanup()
@@ -84,6 +91,7 @@ export function createSsoClient(
 			}
 
 			const cleanup = () => {
+				signal?.removeEventListener('abort', onAbort)
 				clearTimeout(timeout)
 				ipc.of[SERVER_ID].off('checkAuth', responseHandler)
 				checkAuthCache.delete(sessionCookie ?? '')
